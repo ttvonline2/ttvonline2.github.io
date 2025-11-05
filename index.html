@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Personal Skills Portfolio - Showcase of my professional skills and expertise">
-    <title>My Skills Portfolio</title>
+    <title>Your Name | Professional Portfolio</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,19 +13,24 @@
     <nav class="navbar">
         <div class="container">
             <div class="logo">
-                <h2>My Portfolio</h2>
+                <h2>Your Name</h2>
             </div>
             <ul class="nav-links">
                 <li><a href="#home">Home</a></li>
-                <li><a href="#about">About</a></li>
                 <li><a href="#skills">Skills</a></li>
+                <li><a href="#experience">Experience</a></li>
                 <li><a href="#projects">Projects</a></li>
                 <li><a href="#contact">Contact</a></li>
             </ul>
-            <div class="hamburger">
-                <span></span>
-                <span></span>
-                <span></span>
+            <div class="nav-actions">
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
             </div>
         </div>
     </nav>
@@ -34,21 +39,17 @@
     <section id="home" class="hero">
         <div class="container">
             <div class="hero-content">
-                <h1 class="fade-in">Welcome to My Portfolio</h1>
-                <p class="fade-in">Showcasing My Skills & Expertise</p>
-                <a href="#skills" class="btn fade-in">Explore My Skills</a>
-            </div>
-        </div>
-    </section>
-
-    <!-- About Section -->
-    <section id="about" class="about">
-        <div class="container">
-            <h2 class="section-title">About Me</h2>
-            <div class="about-content">
-                <div class="about-text">
-                    <p>Hi! I'm a passionate professional dedicated to continuous learning and growth. I specialize in various technologies and love bringing creative ideas to life.</p>
-                    <p>With a strong foundation in modern development practices, I strive to create impactful solutions that make a difference.</p>
+                <div class="hero-text">
+                    <h1 class="name-title">Truong Tan Vang</h1>
+                    <h2 class="job-title">Software Engineer</h2>
+                    <p class="hero-description">I am a passionate software engineer with expertise in building dynamic web applications. I love turning ideas into reality through code.</p>
+                    <div class="hero-buttons">
+                        <a href="#projects" class="btn btn-primary">View Projects</a>
+                        <a href="#contact" class="btn btn-secondary">Get in Touch</a>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <img src="my_image.jpg" alt="Truong Tan Vang" class="profile-image">
                 </div>
             </div>
         </div>
@@ -57,90 +58,145 @@
     <!-- Skills Section -->
     <section id="skills" class="skills">
         <div class="container">
-            <h2 class="section-title">My Skills</h2>
-            <div class="skills-grid">
-                <!-- Programming Languages -->
-                <div class="skill-card">
-                    <div class="skill-icon">
-                        <i class="fas fa-code"></i>
+            <h2 class="section-title">Core Skills</h2>
+            <div class="skills-grid-modern">
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-js"></i>
                     </div>
-                    <h3>Programming Languages</h3>
-                    <ul class="skill-list">
-                        <li>JavaScript / TypeScript</li>
-                        <li>Python</li>
-                        <li>Java</li>
-                        <li>C++ / C#</li>
-                    </ul>
+                    <span class="skill-name">JavaScript</span>
                 </div>
-
-                <!-- Web Development -->
-                <div class="skill-card">
-                    <div class="skill-icon">
-                        <i class="fas fa-laptop-code"></i>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-react"></i>
                     </div>
-                    <h3>Web Development</h3>
-                    <ul class="skill-list">
-                        <li>HTML5 & CSS3</li>
-                        <li>React / Vue.js</li>
-                        <li>Node.js / Express</li>
-                        <li>Responsive Design</li>
-                    </ul>
+                    <span class="skill-name">React</span>
                 </div>
-
-                <!-- Database -->
-                <div class="skill-card">
-                    <div class="skill-icon">
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-node-js"></i>
+                    </div>
+                    <span class="skill-name">Node.js</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-python"></i>
+                    </div>
+                    <span class="skill-name">Python</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-git-alt"></i>
+                    </div>
+                    <span class="skill-name">Git</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-docker"></i>
+                    </div>
+                    <span class="skill-name">Docker</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
                         <i class="fas fa-database"></i>
                     </div>
-                    <h3>Database</h3>
-                    <ul class="skill-list">
-                        <li>MongoDB</li>
-                        <li>MySQL / PostgreSQL</li>
-                        <li>Redis</li>
-                        <li>Firebase</li>
-                    </ul>
+                    <span class="skill-name">MongoDB</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-aws"></i>
+                    </div>
+                    <span class="skill-name">AWS</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Experience Section -->
+    <section id="experience" class="experience">
+        <div class="container">
+            <h2 class="section-title">Experience</h2>
+            <div class="experience-timeline">
+                <!-- Experience Item 1 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div>
+                                <h3>Your Job Title</h3>
+                                <p class="company-name">Company Name</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jan 2023 - Present</span>
+                        </div>
+                    </div>
+                    <p class="experience-description">
+                        Describe your key responsibilities and achievements in this role. Highlight the impact you made and the technologies you used.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">React</span>
+                        <span class="tech-badge">Node.js</span>
+                        <span class="tech-badge">MongoDB</span>
+                        <span class="tech-badge">AWS</span>
+                    </div>
                 </div>
 
-                <!-- Tools & Technologies -->
-                <div class="skill-card">
-                    <div class="skill-icon">
-                        <i class="fas fa-tools"></i>
+                <!-- Experience Item 2 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div>
+                                <h3>Previous Job Title</h3>
+                                <p class="company-name">Previous Company</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jun 2021 - Dec 2022</span>
+                        </div>
                     </div>
-                    <h3>Tools & Technologies</h3>
-                    <ul class="skill-list">
-                        <li>Git & GitHub</li>
-                        <li>Docker</li>
-                        <li>VS Code</li>
-                        <li>AWS / Azure</li>
-                    </ul>
+                    <p class="experience-description">
+                        Describe your responsibilities and accomplishments in this position. Focus on measurable results and skills developed.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">JavaScript</span>
+                        <span class="tech-badge">Python</span>
+                        <span class="tech-badge">PostgreSQL</span>
+                    </div>
                 </div>
 
-                <!-- Soft Skills -->
-                <div class="skill-card">
-                    <div class="skill-icon">
-                        <i class="fas fa-users"></i>
+                <!-- Experience Item 3 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div>
+                                <h3>Earlier Position</h3>
+                                <p class="company-name">Earlier Company</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jan 2020 - May 2021</span>
+                        </div>
                     </div>
-                    <h3>Soft Skills</h3>
-                    <ul class="skill-list">
-                        <li>Problem Solving</li>
-                        <li>Team Collaboration</li>
-                        <li>Communication</li>
-                        <li>Time Management</li>
-                    </ul>
-                </div>
-
-                <!-- Other Skills -->
-                <div class="skill-card">
-                    <div class="skill-icon">
-                        <i class="fas fa-graduation-cap"></i>
+                    <p class="experience-description">
+                        Detail your early career experiences and the foundation you built. Mention any significant projects or learning experiences.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">HTML/CSS</span>
+                        <span class="tech-badge">JavaScript</span>
+                        <span class="tech-badge">Git</span>
                     </div>
-                    <h3>Other Skills</h3>
-                    <ul class="skill-list">
-                        <li>Agile / Scrum</li>
-                        <li>UI/UX Design</li>
-                        <li>API Development</li>
-                        <li>Testing & Debugging</li>
-                    </ul>
                 </div>
             </div>
         </div>
@@ -150,34 +206,91 @@
     <section id="projects" class="projects">
         <div class="container">
             <h2 class="section-title">Featured Projects</h2>
-            <div class="projects-grid">
-                <div class="project-card">
-                    <h3>Project 1</h3>
-                    <p>Description of your first project. Highlight the technologies used and the problem it solves.</p>
-                    <div class="project-tags">
-                        <span>React</span>
-                        <span>Node.js</span>
-                        <span>MongoDB</span>
+            <div class="projects-list">
+                <!-- Project 1 -->
+                <div class="project-card-modern">
+                    <div class="project-image">
+                        <div class="project-placeholder">
+                            <i class="fas fa-laptop-code"></i>
+                        </div>
+                    </div>
+                    <div class="project-content">
+                        <h3>Project Name 1</h3>
+                        <a href="#" class="project-link" target="_blank">View Project <i class="fas fa-external-link-alt"></i></a>
+                        <p class="project-description">
+                            A comprehensive description of your project. Explain what problem it solves, who uses it, and what makes it special. Highlight the key features and your role in the development.
+                        </p>
+                        <div class="project-technologies">
+                            <span class="tech-tag">React</span>
+                            <span class="tech-tag">Node.js</span>
+                            <span class="tech-tag">MongoDB</span>
+                            <span class="tech-tag">REST API</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="project-card">
-                    <h3>Project 2</h3>
-                    <p>Description of your second project. Explain the key features and your role in development.</p>
-                    <div class="project-tags">
-                        <span>Python</span>
-                        <span>Django</span>
-                        <span>PostgreSQL</span>
+                <!-- Project 2 -->
+                <div class="project-card-modern">
+                    <div class="project-image">
+                        <div class="project-placeholder">
+                            <i class="fas fa-mobile-alt"></i>
+                        </div>
+                    </div>
+                    <div class="project-content">
+                        <h3>Project Name 2</h3>
+                        <a href="#" class="project-link" target="_blank">View Project <i class="fas fa-external-link-alt"></i></a>
+                        <p class="project-description">
+                            Detailed explanation of another significant project. Describe the technologies used, challenges faced, and the impact it created. Include metrics if available.
+                        </p>
+                        <div class="project-technologies">
+                            <span class="tech-tag">Python</span>
+                            <span class="tech-tag">Django</span>
+                            <span class="tech-tag">PostgreSQL</span>
+                            <span class="tech-tag">Docker</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="project-card">
-                    <h3>Project 3</h3>
-                    <p>Description of your third project. Showcase the impact and technologies implemented.</p>
-                    <div class="project-tags">
-                        <span>JavaScript</span>
-                        <span>Express</span>
-                        <span>Docker</span>
+                <!-- Project 3 -->
+                <div class="project-card-modern">
+                    <div class="project-image">
+                        <div class="project-placeholder">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                    </div>
+                    <div class="project-content">
+                        <h3>Project Name 3</h3>
+                        <a href="#" class="project-link" target="_blank">View Project <i class="fas fa-external-link-alt"></i></a>
+                        <p class="project-description">
+                            Description of your third notable project. Focus on unique features, technical achievements, and the value it provides to users.
+                        </p>
+                        <div class="project-technologies">
+                            <span class="tech-tag">JavaScript</span>
+                            <span class="tech-tag">Express</span>
+                            <span class="tech-tag">Firebase</span>
+                            <span class="tech-tag">CI/CD</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Project 4 -->
+                <div class="project-card-modern">
+                    <div class="project-image">
+                        <div class="project-placeholder">
+                            <i class="fas fa-shopping-cart"></i>
+                        </div>
+                    </div>
+                    <div class="project-content">
+                        <h3>Project Name 4</h3>
+                        <a href="#" class="project-link" target="_blank">View Project <i class="fas fa-external-link-alt"></i></a>
+                        <p class="project-description">
+                            Another impressive project showcasing your versatility and technical skills. Explain the architecture, your contributions, and lessons learned.
+                        </p>
+                        <div class="project-technologies">
+                            <span class="tech-tag">Vue.js</span>
+                            <span class="tech-tag">GraphQL</span>
+                            <span class="tech-tag">AWS</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -187,21 +300,40 @@
     <!-- Contact Section -->
     <section id="contact" class="contact">
         <div class="container">
-            <h2 class="section-title">Get In Touch</h2>
+            <h2 class="section-title">Get in Touch</h2>
             <div class="contact-content">
-                <p>Feel free to reach out to me for collaborations or just a friendly chat!</p>
-                <div class="contact-links">
-                    <a href="mailto:your.email@example.com" class="contact-btn">
-                        <i class="fas fa-envelope"></i> Email
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>Your City, Country</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <a href="tel:+1234567890">+1 (234) 567-890</a>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <a href="mailto:your.email@example.com">your.email@example.com</a>
+                    </div>
+                </div>
+                <div class="social-links">
+                    <a href="https://linkedin.com/in/yourusername" target="_blank" class="social-btn" aria-label="LinkedIn">
+                        <i class="fab fa-linkedin"></i>
                     </a>
-                    <a href="https://github.com/yourusername" target="_blank" class="contact-btn">
-                        <i class="fab fa-github"></i> GitHub
+                    <a href="https://github.com/yourusername" target="_blank" class="social-btn" aria-label="GitHub">
+                        <i class="fab fa-github"></i>
                     </a>
-                    <a href="https://linkedin.com/in/yourusername" target="_blank" class="contact-btn">
-                        <i class="fab fa-linkedin"></i> LinkedIn
+                    <a href="https://stackoverflow.com/users/youruserid" target="_blank" class="social-btn" aria-label="Stack Overflow">
+                        <i class="fab fa-stack-overflow"></i>
                     </a>
-                    <a href="https://twitter.com/yourusername" target="_blank" class="contact-btn">
-                        <i class="fab fa-twitter"></i> Twitter
+                    <a href="https://medium.com/@yourusername" target="_blank" class="social-btn" aria-label="Medium">
+                        <i class="fab fa-medium"></i>
+                    </a>
+                    <a href="https://twitter.com/yourusername" target="_blank" class="social-btn" aria-label="Twitter">
+                        <i class="fab fa-twitter"></i>
+                    </a>
+                    <a href="https://youtube.com/@yourusername" target="_blank" class="social-btn" aria-label="YouTube">
+                        <i class="fab fa-youtube"></i>
                     </a>
                 </div>
             </div>
@@ -211,7 +343,7 @@
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2025 My Portfolio. All rights reserved.</p>
+            <p>&copy; 2025 Your Name. All rights reserved.</p>
         </div>
     </footer>
 

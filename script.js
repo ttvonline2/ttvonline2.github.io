@@ -1,3 +1,33 @@
+// Theme Toggle Functionality
+const themeToggle = document.getElementById('themeToggle');
+const html = document.documentElement;
+const themeIcon = themeToggle.querySelector('i');
+
+// Check for saved theme preference or default to 'light'
+const currentTheme = localStorage.getItem('theme') || 'light';
+html.setAttribute('data-theme', currentTheme);
+updateThemeIcon(currentTheme);
+
+// Theme toggle button click handler
+themeToggle.addEventListener('click', () => {
+    const currentTheme = html.getAttribute('data-theme');
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    
+    html.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    updateThemeIcon(newTheme);
+});
+
+function updateThemeIcon(theme) {
+    if (theme === 'dark') {
+        themeIcon.classList.remove('fa-moon');
+        themeIcon.classList.add('fa-sun');
+    } else {
+        themeIcon.classList.remove('fa-sun');
+        themeIcon.classList.add('fa-moon');
+    }
+}
+
 // Mobile Navigation Toggle
 const hamburger = document.querySelector('.hamburger');
 const navLinks = document.querySelector('.nav-links');
@@ -62,19 +92,19 @@ const observer = new IntersectionObserver((entries) => {
     });
 }, observerOptions);
 
-// Observe skill cards
-document.querySelectorAll('.skill-card').forEach((card, index) => {
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(30px)';
-    card.style.transition = `all 0.6s ease ${index * 0.1}s`;
+// Observe all animated elements
+document.querySelectorAll('.skill-item').forEach((card, index) => {
+    card.style.transition = `all 0.5s ease ${index * 0.05}s`;
     observer.observe(card);
 });
 
-// Observe project cards
-document.querySelectorAll('.project-card').forEach((card, index) => {
-    card.style.opacity = '0';
-    card.style.transform = 'translateY(30px)';
-    card.style.transition = `all 0.6s ease ${index * 0.1}s`;
+document.querySelectorAll('.experience-item').forEach((card, index) => {
+    card.style.transition = `all 0.5s ease ${index * 0.1}s`;
+    observer.observe(card);
+});
+
+document.querySelectorAll('.project-card-modern').forEach((card, index) => {
+    card.style.transition = `all 0.5s ease ${index * 0.15}s`;
     observer.observe(card);
 });
 
@@ -100,74 +130,18 @@ function activateNavLink() {
 
 window.addEventListener('scroll', activateNavLink);
 
-// Add typing effect to hero title (optional enhancement)
-const heroTitle = document.querySelector('.hero-content h1');
-if (heroTitle) {
-    const text = heroTitle.textContent;
-    heroTitle.textContent = '';
-    let i = 0;
-    
-    function typeWriter() {
-        if (i < text.length) {
-            heroTitle.textContent += text.charAt(i);
-            i++;
-            setTimeout(typeWriter, 100);
-        }
-    }
-    
-    // Start typing effect after a short delay
-    setTimeout(typeWriter, 500);
-}
-
-// Add parallax effect to hero section
-window.addEventListener('scroll', () => {
-    const hero = document.querySelector('.hero');
-    const scrolled = window.pageYOffset;
-    if (hero) {
-        hero.style.transform = `translateY(${scrolled * 0.5}px)`;
-    }
+// Subtle fade-in for sections on scroll
+const fadeElements = document.querySelectorAll('.experience-item, .project-card-modern, .skill-item');
+fadeElements.forEach((element, index) => {
+    element.style.opacity = '0';
+    element.style.transform = 'translateY(20px)';
 });
 
-// Skill card click to expand (optional feature)
-document.querySelectorAll('.skill-card').forEach(card => {
-    card.addEventListener('click', function() {
-        this.classList.toggle('expanded');
-    });
-});
-
-// Add particle effect to hero section (lightweight version)
-function createParticles() {
-    const hero = document.querySelector('.hero');
-    if (!hero) return;
-    
-    for (let i = 0; i < 20; i++) {
-        const particle = document.createElement('div');
-        particle.className = 'particle';
-        particle.style.cssText = `
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.5);
-            border-radius: 50%;
-            left: ${Math.random() * 100}%;
-            top: ${Math.random() * 100}%;
-            animation: float ${5 + Math.random() * 10}s infinite;
-        `;
-        hero.appendChild(particle);
-    }
-}
-
-// Add floating animation for particles
+// Add active link styling
 const style = document.createElement('style');
 style.textContent = `
-    @keyframes float {
-        0%, 100% { transform: translateY(0) translateX(0); }
-        25% { transform: translateY(-20px) translateX(10px); }
-        50% { transform: translateY(-40px) translateX(-10px); }
-        75% { transform: translateY(-20px) translateX(10px); }
-    }
     .active-link {
-        color: #6366f1 !important;
+        color: #2563eb !important;
         position: relative;
     }
     .active-link::after {
@@ -177,13 +151,10 @@ style.textContent = `
         left: 0;
         width: 100%;
         height: 2px;
-        background: #6366f1;
+        background: #2563eb;
     }
 `;
 document.head.appendChild(style);
-
-// Initialize particles
-createParticles();
 
 // Add scroll-to-top button
 const scrollTopBtn = document.createElement('button');
