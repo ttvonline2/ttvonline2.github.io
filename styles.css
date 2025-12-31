@@ -9,13 +9,13 @@
     --primary-color: #2563eb;
     --secondary-color: #3b82f6;
     --accent-color: #60a5fa;
-    --bg-primary: #ffffff;
-    --bg-secondary: #f8fafc;
-    --bg-tertiary: #f1f5f9;
+    --bg-primary: #f8f9fa;
+    --bg-secondary: #f0f4f8;
+    --bg-tertiary: #e8eef5;
     --text-primary: #0f172a;
     --text-secondary: #475569;
     --text-tertiary: #64748b;
-    --border-color: #e2e8f0;
+    --border-color: #dde5ed;
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
     --shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
     --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
@@ -279,6 +279,9 @@ section {
 /* Skills Section */
 .skills {
     background: var(--bg-secondary);
+    position: relative;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
 }
 
 .skills-grid-modern {
@@ -328,6 +331,8 @@ section {
 /* Experience Section */
 .experience {
     background: var(--bg-primary);
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .experience-timeline {
@@ -420,8 +425,10 @@ section {
 
 /* Certificates Section */
 .certificates {
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
     padding: 5rem 0;
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .certificates-grid {
@@ -498,7 +505,9 @@ section {
 
 /* Projects Section */
 .projects {
-    background: var(--bg-secondary);
+    background: var(--bg-primary);
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
 }
 
 .projects-list {
@@ -595,7 +604,54 @@ section {
 
 /* Contact Section */
 .contact {
-    background: var(--bg-primary);
+    background: var(--bg-secondary);
+    position: relative;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.contact-title-highlight {
+    font-size: 3rem !important;
+    font-weight: 800 !important;
+    background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    position: relative;
+    padding-bottom: 1.5rem;
+    animation: fadeInScale 0.8s ease-out;
+}
+
+.contact-title-highlight::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+    border-radius: 2px;
+    animation: expandWidth 0.8s ease-out 0.3s both;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes expandWidth {
+    from {
+        width: 0;
+    }
+    to {
+        width: 120px;
+    }
 }
 
 .contact-content {
