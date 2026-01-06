@@ -234,18 +234,48 @@ html {
     animation-fill-mode: both;
 }
 
+/* ========== PROFILE IMAGE SECTION - CUSTOMIZABLE SIZE ========== */
+/* Change these values to adjust image and frame size proportionally */
+:root {
+    --profile-size: 320px; /* Main size of circular frame and image */
+}
+
+.circular-frame {
+    width: var(--profile-size);
+    height: var(--profile-size);
+    border-radius: 50%;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 15px 45px rgba(37, 99, 235, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.05), rgba(96, 165, 250, 0.05));
+    border: 1px solid rgba(37, 99, 235, 0.15);
+}
+
 .profile-image {
-    width: 300px;
-    height: 300px;
-    border-radius: 20px;
-    object-fit: cover;
-    box-shadow: var(--shadow-lg);
-    transition: transform 0.3s ease;
+    width: 380px;
+    height: 380px;
+    /* CUSTOMIZABLE: 'contain' preserves aspect ratio, 'cover' fills frame */
+    /* object-position controls where to position image: 'center' keeps center, 'top' shows head, 'bottom' shows lower body */
+    object-fit: contain;
+    object-position: center;
+    transition: transform 0.4s cubic-bezier(0.4, 0.0, 0.2, 1), filter 0.4s ease;
+    transform-origin: center;
+    position: absolute;
+    z-index: 5;
 }
 
 .profile-image:hover {
-    transform: scale(1.05);
+    transform: scale(1.05   );
+    filter: brightness(1.1);
 }
+
+.frame-overlay-top {
+    display: none;
+}
+/* ========== END OF CUSTOMIZABLE SECTION ========== */
 
 .profile-placeholder {
     width: 300px;
