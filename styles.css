@@ -871,6 +871,7 @@ section {
         gap: 1rem;
     }
 
+    .circular-frame,
     .profile-image,
     .profile-placeholder {
         width: 250px;
@@ -925,6 +926,7 @@ section {
         padding: 1.5rem;
     }
 
+    .circular-frame,
     .profile-image,
     .profile-placeholder {
         width: 200px;
