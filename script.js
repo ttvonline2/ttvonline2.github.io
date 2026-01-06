@@ -3,8 +3,15 @@ const themeToggle = document.getElementById('themeToggle');
 const html = document.documentElement;
 const themeIcon = themeToggle.querySelector('i');
 
-// Check for saved theme preference or default to 'light'
-const currentTheme = localStorage.getItem('theme') || 'light';
+// Get system theme preference and print log
+const getSystemTheme = () => {
+    const systemTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    console.log('System theme preference:', systemTheme);
+    return systemTheme;
+};
+
+// Check for saved theme preference or default to system theme
+const currentTheme = localStorage.getItem('theme') || getSystemTheme();
 html.setAttribute('data-theme', currentTheme);
 updateThemeIcon(currentTheme);
 
