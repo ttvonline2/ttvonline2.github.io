@@ -671,7 +671,7 @@ exportPdfBtn.addEventListener('click', async () => {
     doc.setFontSize(8);
     doc.setTextColor(...colors.darkGray);
     doc.setFont('helvetica', 'italic');
-    doc.text('Generated from professional portfolio | truongtanvang@gmail.com', pageWidth / 2, pageHeight - 10, { align: 'center' });
+    doc.text('', pageWidth / 2, pageHeight - 10, { align: 'center' });
     
     // Save the PDF
     doc.save('Truong_Tan_Vang_CV.pdf');
