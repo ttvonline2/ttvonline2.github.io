@@ -159,42 +159,45 @@
                                 <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
                             </div>
                             <div>
-                                <h3>Function Architect (Android) - Coding Expert</h3>
+                                <h3>Coding Expert &amp; Functional Architect</h3>
                                 <p class="company-name">LG ELECTRONICS</p>
                             </div>
                         </div>
                         <div class="experience-date">
                             <i class="far fa-calendar"></i>
-                            <span>June 2024 - Present</span>
+                            <span>Aug 2025 - Present</span>
                         </div>
                     </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: HKMC – Hyundai, GM</h4>
                     <p class="experience-description">
-                        Responsible for building new modules in both Android services and Android apps across multiple automotive projects:
+                        <strong>1. GVM SystemUI [Maintenance &amp; Enhancement]</strong><br>
+                        Inherited and extended AOSP SystemUI for the GM automotive project:
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li><strong>FOD Service (Features on Demand):</strong> For Nissan CDC project</li>
-                        <li><strong>WebOS Projection:</strong> For BMW (Rolls Royce) project</li>
+                        <li>Rebuilt layout to support multiple themes, vehicle models, and screen sizes.</li>
+                        <li>Created a new <strong>QuickControl</strong> floating panel using WindowManager for quick system settings.</li>
+                        <li>Modified <strong>PowerManagerService</strong> to support Minimal Mode and Burn-in protection popups.</li>
+                        <li>Updated <strong>com.android.internal.policy</strong> to block app content from rendering beneath the Navigation Bar.</li>
+                        <li>Enabled background blur via <code>ro.surface_flinger.supports_background_blur=1</code>.</li>
+                        <li>Unit Testing with JUnit 4 and Mockito-Kotlin.</li>
                     </ul>
                     <p class="experience-description">
-                        Building and supporting developer environments:
+                        <strong>2. Improving Project Developer Environment</strong>
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li>Setup SWUT for several modules in GM (SystemUI, Settings, Keyboard, Vehicle Status)</li>
-                        <li>Setup ADB for GVM (GM) project</li>
+                        <li>Configured ADB setup directly into Android containers with mountable system/system_ext partitions.</li>
+                        <li>Set up Python scripts to sync source code to the build server with automated download and installation.</li>
+                        <li>Configured Gradle build for SystemUI to streamline the build and testing workflow.</li>
                     </ul>
                     <p class="experience-description">
-                        Participated in technical management for multiple modules:
+                        <strong>3. Technical support:</strong> Manual HMI, QIBLA HMI, Settings HMI, Vehicle Information, LgeUiLib, Talkback service, Keyboards.
                     </p>
-                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li><strong>HKMC:</strong> Qibla, Manual HMI, Ecall</li>
-                        <li><strong>BMW:</strong> WebOS Projection Android</li>
-                        <li><strong>GM:</strong> SystemUI, Settings, Keyboard, Vehicle Status</li>
-                    </ul>
                     <div class="experience-technologies">
-                        <span class="tech-badge">Android Automotive OS</span>
-                        <span class="tech-badge">Architecture Design</span>
-                        <span class="tech-badge">WebOS</span>
-                        <span class="tech-badge">Developer Tools</span>
+                        <span class="tech-badge">Linux OS</span>
+                        <span class="tech-badge">Android Container</span>
+                        <span class="tech-badge">Java</span>
+                        <span class="tech-badge">Kotlin</span>
+                        <span class="tech-badge">LXC</span>
                     </div>
                 </div>
 
@@ -212,22 +215,33 @@
                         </div>
                         <div class="experience-date">
                             <i class="far fa-calendar"></i>
-                            <span>July 2023 - June 2024</span>
+                            <span>Sep 2024 - Aug 2025</span>
                         </div>
                     </div>
-                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: AIVI – Nissan & Renault (Automotive)</h4>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: HKMC – Hyundai, BMW</h4>
                     <p class="experience-description">
-                        Led a team of 5 engineers on automotive project (240 total project members). Maintained and developed HVAC, Seat, and Unit Services. Designed and developed FoD Service from scratch based on customer requirements. Successfully suggested the Architecture and business logic for FoD Service implementation.
+                        <strong>1. WebOS Projection Android BMW [New Development]</strong><br>
+                        A dual-layer framework bridging Android (container) and WebOS (container) via an LCP Bus:
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><strong>HMI Layer:</strong> Jetpack Compose-based Android Launcher rendered transparently over WebOS, using AIDL Binder for service communication with System UID privileges and a Public API for third-party integration.</li>
+                        <li><strong>Projection Service:</strong> Central broker using Proxy/Manager patterns with Coroutine-based auto-reconnection.</li>
+                        <li><strong>System Service:</strong> JNI Gateway bridging Android to the WebOS native LCP bus.</li>
+                        <li><strong>Data &amp; IPC:</strong> Standardized on AIDL across all layers with JSON polymorphic deserialization.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>2. Technical support:</strong> ECall HMI/Service, Manual HMI, QIBLA HMI.
                     </p>
                     <div class="experience-technologies">
-                        <span class="tech-badge">Android Automotive OS</span>
-                        <span class="tech-badge">Binder</span>
-                        <span class="tech-badge">AIDL</span>
-                        <span class="tech-badge">IPC</span>
+                        <span class="tech-badge">QNX Hypervisor</span>
+                        <span class="tech-badge">Android VM</span>
+                        <span class="tech-badge">SOMEIP</span>
+                        <span class="tech-badge">Java</span>
+                        <span class="tech-badge">Kotlin</span>
                     </div>
                 </div>
 
-                <!-- Experience Item 2 -->
+                <!-- Experience Item 3 -->
                 <div class="experience-item">
                     <div class="experience-header">
                         <div class="experience-company">
@@ -235,18 +249,70 @@
                                 <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
                             </div>
                             <div>
-                                <h3>HMI/Service Developer</h3>
+                                <h3>Functional Owner (Technical Leader)</h3>
                                 <p class="company-name">LG ELECTRONICS</p>
                             </div>
                         </div>
                         <div class="experience-date">
                             <i class="far fa-calendar"></i>
-                            <span>June 2021 - July 2023</span>
+                            <span>Jul 2023 - Sep 2024</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: AIVI – Nissan &amp; Renault (Automotive)</h4>
+                    <p class="experience-description">
+                        <strong>1. HVAC, Seat Services [Maintenance]</strong><br>
+                        Plug-in services (running in the same process as the car service) that retrieve/set information from live and persistence configurations, providing data for the HVAC/SEAT HMI.
+                    </p>
+                    <p class="experience-description" style="margin-top: 0.5rem;">
+                        <strong>2. FoD Service [New Development]</strong><br>
+                        Feature on Demand — handling applicability checks, execution validation, and state persistence for vehicle software features delivered via OCM (Off-board Communication Manager).
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li>State-machine driven execution pipeline ensuring ordered, resumable processing of FOD lifecycle events across reboots.</li>
+                        <li>Configured SEPolicy: dedicated <code>nissan_fod_file</code> label with rw access for <code>alliancecarservice_app</code> only.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>3. Technical support:</strong> Unit Service, User Profile Service.<br>
+                        <strong>4. ASPICE support:</strong> Reviewed all ASPICE documents (SRS, SAD, SDD, TC) for the team's modules.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">Android Automotive OS</span>
+                        <span class="tech-badge">Binder</span>
+                        <span class="tech-badge">AIDL</span>
+                        <span class="tech-badge">IPC</span>
+                        <span class="tech-badge">Java</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 4 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Embedded Software Developer</h3>
+                                <p class="company-name">LG ELECTRONICS</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jun 2021 - Jul 2023</span>
                         </div>
                     </div>
                     <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: PIVI – Land Rover (Automotive)</h4>
                     <p class="experience-description">
-                        Maintained and developed online media applications (Spotify, TuneIn, Deezer) and Cluster Service on automotive infotainment system. Improved application performance through caching implementation and enhanced user experience by dynamically changing background colors based on Spotify album artwork. Team size evolved from 10 to 4 members (150 total project members).
+                        <strong>1. Online Media - HMI Layer [Maintenance &amp; Enhancement]</strong><br>
+                        An application in the car that allows users to listen to online media content like Spotify, TuneIn, Deezer, Kuwo, Alexa, and Tmall Genie.
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li>Improved app performance through caching implementation.</li>
+                        <li>Enhanced UX with dynamic background colors based on album artwork.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>2. Cluster Service – Service Layer [Maintenance &amp; Enhancement]</strong><br>
+                        A service for the exchange of information between the Cluster device and other services. Provides map, intersection, media, and phone data to the Cluster display via SOME/IP, CAN, and APIX protocols.
                     </p>
                     <div class="experience-technologies">
                         <span class="tech-badge">QNX OS</span>

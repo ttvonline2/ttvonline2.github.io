@@ -215,7 +215,42 @@ scrollTopBtn.addEventListener('mouseleave', () => {
 // Export to PDF functionality
 const exportPdfBtn = document.getElementById('exportPdfBtn');
 
-exportPdfBtn.addEventListener('click', async () => {
+exportPdfBtn.addEventListener('click', () => {
+    const link = document.createElement('a');
+    link.href = 'CV/[Android App Engineer] Truong_Tan_Vang.pdf';
+    link.download = '[Android App Engineer] Truong_Tan_Vang.pdf';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Show success message
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 30px 40px;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        z-index: 10000;
+        text-align: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    `;
+    modal.innerHTML = `
+        <div style="font-size: 48px; margin-bottom: 15px;">✅</div>
+        <div style="font-size: 18px; font-weight: 600; color: #10b981; margin-bottom: 8px;">CV Downloaded!</div>
+        <div style="font-size: 14px; color: #6b7280;">Your professional CV has been downloaded</div>
+    `;
+    document.body.appendChild(modal);
+    setTimeout(() => {
+        modal.style.opacity = '0';
+        modal.style.transition = 'opacity 0.3s ease';
+        setTimeout(() => modal.remove(), 300);
+    }, 2000);
+
+    if (false) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
     
@@ -675,34 +710,7 @@ exportPdfBtn.addEventListener('click', async () => {
     
     // Save the PDF
     doc.save('Truong_Tan_Vang_CV.pdf');
-    
-    // Show success message with better styling
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        background: white;
-        padding: 30px 40px;
-        border-radius: 12px;
-        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        z-index: 10000;
-        text-align: center;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
-    `;
-    modal.innerHTML = `
-        <div style="font-size: 48px; margin-bottom: 15px;">✅</div>
-        <div style="font-size: 18px; font-weight: 600; color: #10b981; margin-bottom: 8px;">CV Exported Successfully!</div>
-        <div style="font-size: 14px; color: #6b7280;">Your professional CV has been downloaded</div>
-    `;
-    document.body.appendChild(modal);
-    
-    setTimeout(() => {
-        modal.style.opacity = '0';
-        modal.style.transition = 'opacity 0.3s ease';
-        setTimeout(() => modal.remove(), 300);
-    }, 2000);
+    } // end if (false)
 });
 
 console.log('Portfolio website loaded successfully! 🚀');
