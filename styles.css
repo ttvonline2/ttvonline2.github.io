@@ -505,6 +505,125 @@ section {
     font-size: 0.7rem;
 }
 
+/* Detail Password Modal */
+.detail-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 20000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: fadeInOverlay 0.2s ease;
+}
+
+@keyframes fadeInOverlay {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.detail-modal {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 2.2rem 2.4rem 2rem;
+    width: 100%;
+    max-width: 380px;
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+    animation: slideUpModal 0.25s ease;
+}
+
+@keyframes slideUpModal {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.detail-modal-icon {
+    font-size: 2.6rem;
+    margin-bottom: 0.75rem;
+}
+
+.detail-modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.35rem;
+}
+
+.detail-modal-subtitle {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    margin-bottom: 1.2rem;
+}
+
+.detail-modal-input-wrap {
+    margin-bottom: 1.4rem;
+}
+
+.detail-modal-input {
+    width: 100%;
+    padding: 0.65rem 1rem;
+    border: 1.5px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.detail-modal-input:focus {
+    border-color: var(--primary-color);
+}
+
+.detail-modal-input.input-error {
+    border-color: #ef4444;
+}
+
+.detail-modal-error {
+    margin-top: 0.45rem;
+    font-size: 0.82rem;
+    color: #ef4444;
+}
+
+.detail-modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.detail-modal-btn {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.93rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s, background 0.2s;
+}
+
+.detail-modal-cancel {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+}
+
+.detail-modal-cancel:hover {
+    opacity: 0.8;
+}
+
+.detail-modal-submit {
+    background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+    color: #fff;
+}
+
+.detail-modal-submit:hover {
+    opacity: 0.9;
+}
+
 /* Certificates Section */
 .certificates {
     background: var(--bg-secondary);

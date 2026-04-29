@@ -212,6 +212,65 @@ scrollTopBtn.addEventListener('mouseleave', () => {
     scrollTopBtn.style.transform = 'translateY(0)';
 });
 
+// Detail Link Password Gate
+(function () {
+    const DETAIL_PASSWORD = '123';
+    const modal = document.getElementById('detailPasswordModal');
+    const passwordInput = document.getElementById('detailModalPassword');
+    const submitBtn = document.getElementById('detailModalSubmit');
+    const cancelBtn = document.getElementById('detailModalCancel');
+    const errorMsg = document.getElementById('detailModalError');
+    let pendingHref = null;
+
+    function openModal(href) {
+        pendingHref = href;
+        passwordInput.value = '';
+        passwordInput.classList.remove('input-error');
+        errorMsg.style.display = 'none';
+        modal.style.display = 'flex';
+        setTimeout(() => passwordInput.focus(), 50);
+    }
+
+    function closeModal() {
+        modal.style.display = 'none';
+        pendingHref = null;
+    }
+
+    function trySubmit() {
+        if (passwordInput.value === DETAIL_PASSWORD) {
+            const href = pendingHref;
+            closeModal();
+            window.open(href, '_blank', 'noopener');
+        } else {
+            passwordInput.classList.add('input-error');
+            errorMsg.style.display = 'block';
+            passwordInput.select();
+        }
+    }
+
+    document.querySelectorAll('a.detail-link').forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            openModal(this.href);
+        });
+    });
+
+    submitBtn.addEventListener('click', trySubmit);
+
+    passwordInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') trySubmit();
+        if (e.key === 'Escape') closeModal();
+        passwordInput.classList.remove('input-error');
+        errorMsg.style.display = 'none';
+    });
+
+    cancelBtn.addEventListener('click', closeModal);
+
+    modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+    });
+})();
+
 // Export to PDF functionality
 const exportPdfBtn = document.getElementById('exportPdfBtn');
 
