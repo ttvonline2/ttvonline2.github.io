@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Multi-Theme & Screen Support | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<!-- Back bar -->
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Multi-Theme &amp; Screen Support</span></span>
+</nav>
+
+<!-- Hero -->
+<header class="detail-hero">
+  <div class="category-badge">Layout Engineering</div>
+  <h1>Rebuilt Layout for Multiple Themes,<br>Vehicle Models &amp; Screen Sizes</h1>
+  <p class="subtitle">How a single SystemUI APK adapts its entire visual identity — dimensions, drawables, colors, and themes — based on screen width and GM brand at runtime.</p>
+  <div class="tags">
+    <span>Android Resources</span><span>Width Qualifiers</span><span>Runtime Theme Switching</span>
+    <span>Multi-display</span><span>Cadillac / GMC / Chevrolet</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <!-- TOC -->
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#screen-sizes">Three Screen Sizes, One APK</a></li>
+      <li><a href="#resource-qualifiers">Resource Qualifier Strategy</a></li>
+      <li><a href="#multi-vehicle">Multi-Vehicle Brand Themes</a></li>
+      <li><a href="#runtime">Runtime Detection &amp; Switching</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 Problem -->
+  <section class="detail-section" id="problem">
+    <h2>1. The Problem</h2>
+    <p>SystemUI must run on <strong>3 different physical screens</strong> and support <strong>4 brand themes</strong> — all from a single APK.</p>
+    <div class="card-grid">
+      <div class="card">
+        <h4>FPI 11.5"</h4>
+        <p>2560 × 1080 px</p>
+      </div>
+      <div class="card">
+        <h4>FPI 20"</h4>
+        <p>3760 × 1088 px — ultra-wide panoramic display.</p>
+      </div>
+      <div class="card">
+        <h4>RSI 1-2 (12.2")</h4>
+        <p>1920 × 1080 px — RSI1 (user 0) and RSI2 (user 10)</p>
+      </div>
+    </div>
+    <p style="margin-top:1rem;">Brand themes: <strong>Cadillac</strong>, <strong>Cadillac V-Series</strong>, <strong>Chevrolet</strong>, <strong>GMC</strong>.</p>
+  </section>
+
+  <!-- 2 Screen widths -->
+  <section class="detail-section" id="screen-sizes">
+    <h2>2. Three Screen Sizes, One APK</h2>
+    <p>Android's resource qualifier system resolves the best-matching folder at runtime (AssetManager) based on the <strong>available width in dp</strong>. The same APK installs on all displays; Android's framework automatically selects the correct layout, dimension, and drawable folders.</p>
+
+    <table>
+      <thead>
+        <tr><th>Display</th><th>Resolution</th><th>Width in dp (approx)</th><th>Qualifier Folder Resolved</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>RSI 1-2 (12.2")</td><td>1920 × 1080 px</td><td>~1440 dp</td><td><code>res/values-w1440dp/</code></td></tr>
+        <tr><td>FPI 11.5"</td><td>2560 × 1080 px</td><td>~1920 dp</td><td><code>res/values-w1920dp/</code></td></tr>
+        <tr><td>FPI 20"</td><td>3760 × 1088 px</td><td>~2820 dp</td><td><code>res/values-w2820dp/</code></td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p><strong>* Default <code>res/</code> is not used in production.</strong> It is only available for developer testing when manually changing device density or resolution. All production displays match a specific <code>-wNNNdp</code> qualifier bucket.</p>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>The <code>-wNNNdp</code> qualifier means "available width is <em>at least</em> NNN dp". Android picks the folder with the <strong>largest qualifier that still fits</strong>.</p>
+    </div>
+  </section>
+
+  <!-- 3 Resource qualifiers -->
+  <section class="detail-section" id="resource-qualifiers">
+    <h2>3. Resource Qualifier Strategy</h2>
+    <p>Two independent axes must be handled: <strong>screen size</strong> (static, resolved by Android framework) and <strong>brand theme</strong> (dynamic, resolved at runtime).</p>
+
+    <h3>Axis 1 — Same theme, different screen size → <code>layout-wXXXXdp</code> / <code>values-wXXXXdp</code></h3>
+    <p>All display-size-specific resources live in 3 width-qualified folders. Android's framework automatically picks the best match based on available dp width:</p>
+
+    <table>
+      <thead>
+        <tr><th>Resource Type</th><th>Qualifier folders</th><th>Varies How?</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>layout/</code></td><td><code>layout-w1440dp/</code>, <code>layout-w1920dp/</code>, <code>layout-w2820dp/</code></td><td>ViewGroup sizes, margins, child counts per screen</td></tr>
+        <tr><td><code>values/dimens.xml</code></td><td><code>values-w1440dp/</code>, <code>values-w1920dp/</code>, <code>values-w2820dp/</code></td><td>Precise dp: card_width, card_height, nav padding — pixel-perfect per panel</td></tr>
+        <tr><td><code>values/themes.xml</code></td><td>same 3 folders</td><td>Each file defines all 4 brand themes, referencing screen-local <code>@dimen/</code> values</td></tr>
+        <tr><td><code>drawable/</code></td><td><code>drawable-w1440dp/</code>, <code>drawable-w1920dp/</code>, <code>drawable-w2820dp/</code></td><td>Vector assets at different intrinsic sizes</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">XML</span>
+        <span class="code-file">values-w1440dp/dimens.xml (RSI 12.2")</span>
+      </div>
+      <pre><code><span class="cm">&lt;!-- 12.2 inch Screen Dimensions (1920x1080) --&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_width"</span><span class="kw">&gt;</span>1259.69dp<span class="kw">&lt;/dimen&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_height"</span><span class="kw">&gt;</span>434.50dp<span class="kw">&lt;/dimen&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_margin_start"</span><span class="kw">&gt;</span>63.89dp<span class="kw">&lt;/dimen&gt;</span></code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">XML</span>
+        <span class="code-file">values-w2820dp/dimens.xml (FPI 20")</span>
+      </div>
+      <pre><code><span class="cm">&lt;!-- 20 inch Screen Dimensions (3760x1088) --&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_width"</span><span class="kw">&gt;</span>1500.88dp<span class="kw">&lt;/dimen&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_height"</span><span class="kw">&gt;</span>511.76dp<span class="kw">&lt;/dimen&gt;</span>
+<span class="kw">&lt;dimen</span> name=<span class="st">"card_margin_start"</span><span class="kw">&gt;</span>1075.13dp<span class="kw">&lt;/dimen&gt;</span></code></pre>
+    </div>
+
+    <h3>Axis 2 — Same screen, different theme → Runtime style switching</h3>
+    <p>Each <code>values-wXXXXdp/themes.xml</code> defines <strong>all 4 brand styles</strong> for that screen size. Style differences (colors, fonts, drawables, icons, nav bar dimensions) are handled via Android theme attributes. At runtime:</p>
+
+    <ol style="margin-left: 2rem; line-height: 2;">
+      <li><code>SystemUIApplication.replaceTheme()</code> calls <code>CalibrationUtils.getBrand()</code> and pushes the correct <code>@StyleRes</code> into <code>ThemeUtils</code>.</li>
+      <li><code>NavigationBarFrame</code> constructor explicitly calls <code>context.setTheme(ThemeUtils.getInstance().getTheme())</code>. Other views (e.g. <code>QuickControlBar</code>) are inflated using the same Dagger-scoped <code>@DisplayId LayoutInflater</code> and inherit the already-themed context — no additional <code>setTheme()</code> needed.</li>
+      <li>All brand attributes (<code>?attr/navigation_background</code>, <code>?attr/gm_font</code>, <code>?attr/card_width_theme</code>…) resolve automatically from the active theme.</li>
+    </ol>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Java</span>
+        <span class="code-file">SystemUIApplication.java — replaceTheme()</span>
+      </div>
+      <pre><code><span class="cm">// Called at startup after CalibrationUtils is ready</span>
+<span class="kw">switch</span> (CalibrationUtils.<span class="fn">getInstance</span>().<span class="fn">getBrand</span>()) {
+    <span class="kw">case</span> CADILLAC:
+        ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">setCadillacTheme</span>(R.style.SystemUI_CadillacTheme); <span class="kw">break</span>;
+    <span class="kw">case</span> CHEVROLET:
+        ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">setChevyTheme</span>(R.style.SystemUI_ChevyTheme); <span class="kw">break</span>;
+    <span class="kw">case</span> GMC:
+        ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">setGmcTheme</span>(R.style.SystemUI_GMCTheme); <span class="kw">break</span>;
+    <span class="kw">case</span> CADILLAC_V_SERIES:
+        ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">setCadillacVSeriesTheme</span>(R.style.SystemUI_CadillacVSeriesTheme); <span class="kw">break</span>;
+    <span class="kw">default</span>:
+        ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">setDefaultTheme</span>(R.style.SystemUI_CadillacTheme); <span class="kw">break</span>;
+}</code></pre>
+    </div>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Java</span>
+        <span class="code-file">NavigationBarFrame.java</span>
+      </div>
+      <pre><code><span class="kw">public</span> NavigationBarFrame(Context context, AttributeSet attrs) {
+    <span class="kw">super</span>(context, attrs);
+    context.<span class="fn">setTheme</span>(ThemeUtils.<span class="fn">getInstance</span>().<span class="fn">getTheme</span>()); <span class="cm">// brand style injected here</span>
+}</code></pre>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p><strong>How both axes cross:</strong> Android resolves the correct <code>values-wXXXXdp/themes.xml</code> (screen axis) → then <code>setTheme()</code> picks the right brand style from that file (brand axis). Result: 3 screens × 4 brands = 12 combinations, zero code duplication.</p>
+    </div>
+  </section>
+
+  <!-- 4 Multi-vehicle -->
+  <section class="detail-section" id="multi-vehicle">
+    <h2>4. Multi-Vehicle Brand Themes</h2>
+    <p>Four GM brands share the same hardware but require distinct visual styling. Each <code>values-wXXXXdp/themes.xml</code> defines all 4 brand styles; each style inherits from its parent in LgeUiLib (<code>CadillacTheme</code>, <code>ChevyTheme</code>, <code>GMCTheme</code>, <code>cadillacVSeriesTheme</code>) and overrides dimension attributes via <code>@dimen/</code> — which Android resolves from the matching qualifier bucket.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">XML</span>
+        <span class="code-file">values-w1440dp/themes.xml (excerpt — 4 styles defined per qualifier folder)</span>
+      </div>
+      <pre><code><span class="kw">&lt;style</span> name=<span class="st">"SystemUI.CadillacTheme"</span> parent=<span class="st">"CadillacTheme"</span><span class="kw">&gt;</span>
+    <span class="kw">&lt;item</span> name=<span class="st">"navigation_background"</span><span class="kw">&gt;</span>@drawable/navigationbar_background_cadillac<span class="kw">&lt;/item&gt;</span>
+    <span class="kw">&lt;item</span> name=<span class="st">"navigation_bar_button_height"</span><span class="kw">&gt;</span>@dimen/navigation_bar_button_height_cadillac<span class="kw">&lt;/item&gt;</span>
+    <span class="kw">&lt;item</span> name=<span class="st">"card_width_theme"</span><span class="kw">&gt;</span>@dimen/card_width<span class="kw">&lt;/item&gt;</span>  <span class="cm">&lt;!-- resolved from values-w1440dp/dimens.xml --&gt;</span>
+<span class="kw">&lt;/style&gt;</span>
+<span class="kw">&lt;style</span> name=<span class="st">"SystemUI.GMCTheme"</span> parent=<span class="st">"GMCTheme"</span><span class="kw">&gt;</span> ... <span class="kw">&lt;/style&gt;</span>
+<span class="kw">&lt;style</span> name=<span class="st">"SystemUI.ChevyTheme"</span> parent=<span class="st">"ChevyTheme"</span><span class="kw">&gt;</span> ... <span class="kw">&lt;/style&gt;</span>
+<span class="kw">&lt;style</span> name=<span class="st">"SystemUI.CadillacVSeriesTheme"</span> parent=<span class="st">"cadillacVSeriesTheme"</span><span class="kw">&gt;</span> ... <span class="kw">&lt;/style&gt;</span></code></pre>
+    </div>
+
+    <p>Wallpaper is also swapped at runtime via <code>GvmUtils.getWallpaper()</code>:</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Java</span>
+        <span class="code-file">GvmUtils.java — getWallpaper()</span>
+      </div>
+      <pre><code><span class="kw">switch</span> (brand) {
+    <span class="kw">case</span> CHEVROLET:         <span class="kw">return</span> R.drawable.gm_chevy_wallpaper;
+    <span class="kw">case</span> GMC:               <span class="kw">return</span> R.drawable.gm_gmc_wallpaper;
+    <span class="kw">case</span> CADILLAC_V_SERIES: <span class="kw">return</span> R.drawable.gm_cadillac_v_series_wallpaper;
+    <span class="kw">default</span>:                <span class="kw">return</span> R.drawable.gm_cadillac_wallpaper;
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- 5 Runtime detection -->
+  <section class="detail-section" id="runtime">
+    <h2>5. Runtime Detection &amp; Configuration Changes</h2>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-content">
+          <strong>System boots / display connects</strong>
+          <span>Android resolves dp width → selects matching <code>-wNNNdp</code> resource bucket automatically.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-content">
+          <strong>SystemUI starts → <code>replaceTheme()</code></strong>
+          <span><code>CalibrationUtils.getBrand()</code> reads brand from calibration partition → <code>ThemeUtils</code> stores the correct <code>@StyleRes</code>.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-content">
+          <strong>NavigationBarFrame inflated → <code>context.setTheme()</code></strong>
+          <span><code>NavigationBarFrame</code> constructor explicitly calls <code>context.setTheme(ThemeUtils.getInstance().getTheme())</code> — brand style applied to the <code>@DisplayId Context</code>.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3b</div>
+        <div class="flow-content">
+          <strong>QuickControlBar view inflated — inherits themed context</strong>
+          <span><code>QuickControlBarModule</code> inflates <code>quick_control.xml</code> using the same Dagger-scoped <code>@DisplayId LayoutInflater</code>. No explicit <code>setTheme()</code> call — the inflater's context is already themed because <code>NavigationBarFrame</code> is resolved first in the dependency graph.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-content">
+          <strong>ConfigurationController propagates changes</strong>
+          <span>Any subsequent config change (DPI, density, locale) dispatches to all listeners so UI re-draws correctly.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 Why -->
+  <section class="detail-section" id="why">
+    <h2>6. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The alternative — hardcoding pixel checks and <code>if/else</code> branches in Java — would scatter layout logic across the codebase, making it brittle and difficult to test. Android's resource qualifier system is the <strong>idiomatic, framework-supported</strong> mechanism designed exactly for this problem. It keeps display-specific concerns entirely in the resource layer, the Java/Kotlin code stays generic, and adding a new display size only requires a new resource folder — <em>zero Java changes</em>. For an automotive OEM project with long maintenance cycles and multiple hardware configurations, this separation is critical for scalability.</p>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>Zero code duplication</h4>
+        <p>All display variants share 100% of the Java/Kotlin logic. Only resource files differ.</p>
+      </div>
+      <div class="card">
+        <h4>Testable</h4>
+        <p>Each resource qualifier folder can be validated independently with Robolectric by setting a config width.</p>
+      </div>
+      <div class="card">
+        <h4>Extensible</h4>
+        <p>Adding a new vehicle display requires only a new <code>-wXXXdp</code> folder — no APK logic change.</p>
+      </div>
+      <div class="card">
+        <h4>OEM compliance</h4>
+        <p>Single APK artifact satisfies the integration team's requirement for one SystemUI across all vehicle lines.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

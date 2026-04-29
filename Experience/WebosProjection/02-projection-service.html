@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projection Service | WebOS Projection Android BMW</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">WebOS Projection BMW / <span>Projection Service</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Service Architecture</div>
+  <h1>Projection Service: Central Broker<br>with Proxy/Manager Patterns &amp; Coroutine Auto-Reconnection</h1>
+  <p class="subtitle">
+    How the <code>WebosProjectionService</code> acts as the nerve centre of the entire system — decoupling
+    data sources (audio, Bluetooth, network, input) from consumers via a composable Proxy/Manager architecture,
+    with Kotlin Coroutines driving resilient, back-off-aware reconnection to the system layer.
+  </p>
+  <div class="tags">
+    <span>Android Service</span><span>Proxy Pattern</span><span>Manager Pattern</span>
+    <span>Coroutines</span><span>Auto-Reconnect</span><span>Hilt DI</span><span>AIDL</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#overview">Service Overview</a></li>
+      <li><a href="#proxy-pattern">The Proxy Pattern</a></li>
+      <li><a href="#manager-pattern">The Manager Pattern</a></li>
+      <li><a href="#message-flow">Full Message Flow</a></li>
+      <li><a href="#autoreconnect">Coroutine-Based Auto-Reconnection</a></li>
+      <li><a href="#hilt">Dependency Injection with Hilt</a></li>
+      <li><a href="#why">Why These Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. Overview -->
+  <section class="detail-section" id="overview">
+    <h2>1. Service Overview</h2>
+    <p>
+      <code>WebosProjectionService</code> is a long-lived <code>android.app.Service</code> started at boot
+      (via <code>WebosProjectionBootReceiver</code>) and kept alive with <code>START_STICKY</code>. It owns
+      no UI of its own — its sole job is to route messages between:
+    </p>
+    <div class="card-grid" style="margin-top:1rem;">
+      <div class="card">
+        <h4><i class="fas fa-mobile-alt" style="color:var(--accent)"></i> &nbsp;HMI App</h4>
+        <p>Binds via <code>IWebosProjection</code> AIDL. Sends lifecycle, key events, and overlay commands.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-server" style="color:var(--accent)"></i> &nbsp;System Service</h4>
+        <p>Bound via <code>IContainerCommunicationInterface</code> AIDL. Bridges to the LCP / WebOS bus.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-broadcast-tower" style="color:var(--accent)"></i> &nbsp;Android Platform</h4>
+        <p>Audio, Bluetooth, Network, Input — each wrapped in a dedicated <em>Proxy</em>.</p>
+      </div>
+    </div>
+
+    <pre><code><span class="c">// WebosProjectionService.kt (simplified)</span>
+<span class="kw">@AndroidEntryPoint</span>
+<span class="kw">class</span> WebosProjectionService : Service() {
+
+    <span class="c">// Proxies — wrap external data sources</span>
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospSystemProxy:    WospSystemProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospHmiProxy:       WospHmiProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospNetworkProxy:    WospNetworkProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospBluetoothProxy:  WospBluetoothProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospAudioProxy:      WospAudioProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospInputProxy:      WospInputProxy
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospCrossAppProxy:   WospCrossAppProxy
+
+    <span class="c">// Managers — orchestrate business logic</span>
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospFocusManager:    WospFocusManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospNetworkManager:  WospNetworkManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospMediaManager:    WospMediaManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospBluetoothManager: WospBluetoothManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospInputManager:    WospInputManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospCrossAppManager: WospCrossAppManager
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospSystemInfoManager: WospSystemInfoManager
+
+    <span class="kw">override fun</span> onBind(intent: Intent) = mWospHmiProxy.wospServiceImpl  <span class="c">// expose AIDL binder</span>
+
+    <span class="kw">override fun</span> onCreate() {
+        <span class="kw">super</span>.onCreate()
+        mWospSystemProxy.bind()   <span class="c">// connect to system service (with auto-reconnect)</span>
+    }
+
+    <span class="kw">override fun</span> onStartCommand(intent: Intent?, flags: Int, startId: Int) = START_STICKY
+}</code></pre>
+    <p style="margin-top:0.75rem;">
+      All 7 proxies and 7 managers are <code>@Singleton</code> Hilt bindings — they are created once, live for
+      the lifetime of the service process, and injected wherever needed.
+    </p>
+  </section>
+
+  <!-- 2. Proxy Pattern -->
+  <section class="detail-section" id="proxy-pattern">
+    <h2>2. The Proxy Pattern</h2>
+    <p>
+      Every external data source is encapsulated in a <strong>Proxy</strong> class that extends
+      <code>WospBaseProxy</code>. The proxy is the <em>only</em> place in the codebase that talks directly
+      to its corresponding Android platform API — everything else communicates through
+      <code>WospBaseProxy</code>'s listener subscription model.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">WospBaseProxy — the subscription engine</h3>
+    <pre><code><span class="c">// WospBaseProxy.kt (simplified)</span>
+<span class="kw">abstract class</span> WospBaseProxy {
+
+    <span class="c">// Registry: msgId → list of interested listeners</span>
+    <span class="kw">private val</span> listenerMap = mutableMapOf&lt;Int, MutableList&lt;WospProxyDataListener&gt;&gt;()
+
+    <span class="c">/** Managers call this in their init{} to subscribe to specific message IDs */</span>
+    fun registerMessageCallbackListener(ids: List&lt;Int&gt;, listener: WospProxyDataListener) {
+        ids.forEach { id ->
+            listenerMap.getOrPut(id) { mutableListOf() }.add(listener)
+        }
+    }
+
+    <span class="c">/** Proxy calls this internally when new data arrives from the platform */</span>
+    <span class="kw">protected fun</span> dispatchToProxyListener(msgId: Int, data: WospMsg) {
+        listenerMap[msgId]?.forEach { it.onProxyDataChange(msgId, data) }
+    }
+}
+
+<span class="c">// The listener interface managers implement</span>
+interface WospProxyDataListener {
+    fun onProxyDataChange(msgId: Int, data: WospMsg)
+}</code></pre>
+
+    <h3 style="margin-top:1.5rem;">Example: WospNetworkProxy</h3>
+    <pre><code><span class="kw">@Singleton class</span> WospNetworkProxy <span class="kw">@Inject constructor</span>(@ApplicationContext ctx: Context)
+    : WospBaseProxy() {
+
+    <span class="kw">private val</span> connectivityMgr = ctx.getSystemService(ConnectivityManager::class.java)
+
+    <span class="kw">private val</span> networkCallback = <span class="kw">object</span> : ConnectivityManager.NetworkCallback() {
+        <span class="kw">override fun</span> onAvailable(network: Network) {
+            <span class="c">// Notify all subscribers that network is UP</span>
+            dispatchToProxyListener(
+                WospMsgID.NetworkGetStatusOnOff,
+                NetworkGetStatusOnOff(isInternetConnectionAvailable = <span class="kw">true</span>)
+            )
+        }
+        <span class="kw">override fun</span> onLost(network: Network) {
+            dispatchToProxyListener(
+                WospMsgID.NetworkGetStatusOnOff,
+                NetworkGetStatusOnOff(isInternetConnectionAvailable = <span class="kw">false</span>)
+            )
+        }
+    }
+
+    init {
+        connectivityMgr.registerDefaultNetworkCallback(networkCallback)
+    }
+}</code></pre>
+
+    <h3 style="margin-top:1.5rem;">All Proxies at a Glance</h3>
+    <table>
+      <thead><tr><th>Proxy</th><th>Wraps</th><th>Key Events Dispatched</th></tr></thead>
+      <tbody>
+        <tr><td><code>WospSystemProxy</code></td><td><code>IContainerCommunicationInterface</code> AIDL (to system service)</td><td>All HCC/LCP messages from WebOS</td></tr>
+        <tr><td><code>WospHmiProxy</code></td><td><code>IWebosProjection.Stub</code> (exposes AIDL to HMI app)</td><td>All messages from HMI app</td></tr>
+        <tr><td><code>WospNetworkProxy</code></td><td><code>ConnectivityManager.NetworkCallback</code></td><td><code>NetworkGetStatusOnOff</code></td></tr>
+        <tr><td><code>WospBluetoothProxy</code></td><td><code>BluetoothA2dp</code>, <code>BroadcastReceiver</code></td><td><code>BluetoothDeviceStateChanged</code>, <code>BluetoothA2dpStatus</code></td></tr>
+        <tr><td><code>WospAudioProxy</code></td><td><code>AudioManager</code>, <code>HwAudioSource</code></td><td><code>AudioFocusChange</code></td></tr>
+        <tr><td><code>WospInputProxy</code></td><td><code>BroadcastReceiver</code> (Netflix/YouTube/Home buttons)</td><td><code>InputKeyEventRequestLaunchWebosApp</code>, <code>InputKeyEventHome</code></td></tr>
+        <tr><td><code>WospCrossAppProxy</code></td><td><code>BroadcastReceiver</code> (<code>com.lge.car.WOSP</code>)</td><td><code>WospCrossAppRequestShowWebosApp</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 3. Manager Pattern -->
+  <section class="detail-section" id="manager-pattern">
+    <h2>3. The Manager Pattern</h2>
+    <p>
+      Each <strong>Manager</strong> owns a specific domain of business logic. In its <code>init{}</code> block
+      it subscribes to one or more proxies for the message IDs it cares about — then reacts to those messages
+      and routes responses back through the appropriate proxy.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">Anatomy of a Manager (WospFocusManager)</h3>
+    <pre><code><span class="kw">@Singleton class</span> WospFocusManager <span class="kw">@Inject constructor</span>(
+    <span class="kw">private val</span> mWospSystemProxy: WospSystemProxy,
+    <span class="kw">private val</span> mWospHmiProxy:    WospHmiProxy,
+) {
+    <span class="kw">private var</span> isFocus = <span class="kw">false</span>
+    <span class="kw">private var</span> isForeground = <span class="kw">false</span>
+
+    <span class="c">// ── Step 1: declare which message IDs to observe ───────────────────
+    // From WebOS (via system proxy)</span>
+    <span class="kw">private val</span> systemMsgIds = listOf(
+        WospMsgID.HccContainerRequestWebosScreenFocusValue,
+        WospMsgID.HccContainerRequestWebosForegroundState
+    )
+    <span class="c">// From HMI app (via HMI proxy)</span>
+    <span class="kw">private val</span> hmiMsgIds = listOf(WospMsgID.HmiNotifyLifecycle)
+
+    <span class="c">// ── Step 2: define the callback logic ─────────────────────────────</span>
+    <span class="kw">private val</span> systemListener = WospProxyDataListener { msgId, data ->
+        <span class="kw">when</span> (msgId) {
+            WospMsgID.HccContainerRequestWebosScreenFocusValue ->
+                mWospSystemProxy.sendWebosData(
+                    WospMsgID.HccHostRespondWebosScreenFocus,
+                    HccHostRespondWebosScreenFocus(iFocused = isFocus))
+
+            WospMsgID.HccContainerRequestWebosForegroundState ->
+                mWospSystemProxy.sendWebosData(
+                    WospMsgID.HccHostRespondWebosForegroundState,
+                    HccHostRespondWebosForegroundState(isForeground = isForeground))
+        }
+    }
+
+    <span class="kw">private val</span> hmiListener = WospProxyDataListener { _, data ->
+        <span class="kw">val</span> lifecycle = data <span class="kw">as</span> HmiNotifyLifecycle
+        isFocus      = lifecycle.state <span class="kw">in</span> listOf(<span class="str">"onResume"</span>, <span class="str">"onStart"</span>)
+        isForeground = lifecycle.state <span class="kw">in</span> listOf(<span class="str">"onResume"</span>, <span class="str">"onStart"</span>)
+    }
+
+    <span class="c">// ── Step 3: register subscriptions ────────────────────────────────</span>
+    init {
+        mWospSystemProxy.registerMessageCallbackListener(systemMsgIds, systemListener)
+        mWospHmiProxy.registerMessageCallbackListener(hmiMsgIds, hmiListener)
+    }
+}</code></pre>
+
+    <h3 style="margin-top:1.5rem;">All Managers at a Glance</h3>
+    <table>
+      <thead><tr><th>Manager</th><th>Domain</th><th>Proxies Used</th></tr></thead>
+      <tbody>
+        <tr><td><code>WospFocusManager</code></td><td>Screen focus &amp; foreground state tracking</td><td>System, HMI</td></tr>
+        <tr><td><code>WospNetworkManager</code></td><td>Network on/off and info relay</td><td>System, Network</td></tr>
+        <tr><td><code>WospMediaManager</code></td><td>Android audio focus lifecycle</td><td>System, Audio</td></tr>
+        <tr><td><code>WospBluetoothManager</code></td><td>A2DP status and MAC address</td><td>System, Bluetooth</td></tr>
+        <tr><td><code>WospInputManager</code></td><td>Hardware key → WebOS key translation</td><td>System, HMI, Input</td></tr>
+        <tr><td><code>WospCrossAppManager</code></td><td>Android ↔ WebOS app switching</td><td>System, HMI, CrossApp</td></tr>
+        <tr><td><code>WospSystemInfoManager</code></td><td>Version, region, language queries</td><td>System</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 4. Message Flow -->
+  <section class="detail-section" id="message-flow">
+    <h2>4. Full Message Flow</h2>
+    <p>Tracing a concrete example — WebOS asks for the device's network status:</p>
+
+    <div class="card-grid" style="margin-top:1rem;">
+      <div class="card" style="border-left: 3px solid var(--accent);">
+        <h4>① LCP Bus → JNI</h4>
+        <p>WebOS container sends <code>HccContainerRequestNetworkInfo</code> over LCP bus.</p>
+      </div>
+      <div class="card" style="border-left: 3px solid var(--accent);">
+        <h4>② JNI → ContainerCommunicationStub</h4>
+        <p>Native JNI callback fires, <code>triggerMessageCallback(cid=1, cmd=2003, data="{}")</code>.</p>
+      </div>
+      <div class="card" style="border-left: 3px solid var(--accent);">
+        <h4>③ AIDL → WospSystemProxy</h4>
+        <p><code>IContainerCommunicationInterface.IMessageCallback.onCallback()</code> received in service; dispatched to <code>WospSystemProxy.dispatchToProxyListener()</code>.</p>
+      </div>
+      <div class="card" style="border-left: 3px solid var(--accent);">
+        <h4>④ WospNetworkManager reacts</h4>
+        <p>Subscribed to <code>HccContainerRequestNetworkInfo</code>; fetches info from <code>WospNetworkProxy</code> and calls <code>mWospSystemProxy.sendWebosData(HccHostRespondNetworkInfo(...))</code>.</p>
+      </div>
+      <div class="card" style="border-left: 3px solid var(--accent);">
+        <h4>⑤ Response goes back</h4>
+        <p>JSON-serialized response travels: <code>WospSystemProxy → IContainerCommunicationInterface.sendMessage() → LCP JNI → LCP Bus → WebOS</code>.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Auto-Reconnect -->
+  <section class="detail-section" id="autoreconnect">
+    <h2>5. Coroutine-Based Auto-Reconnection</h2>
+    <p>
+      The <code>WebosProjectionService</code> binds to <code>ContainerCommunicationService</code> (in the
+      system module, a separate process). That connection can be lost at any time — system service crash,
+      system update, low-memory kill. The service must recover automatically without losing queued messages.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">Implementation in WospSystemProxy</h3>
+    <pre><code><span class="kw">@Singleton class</span> WospSystemProxy <span class="kw">@Inject constructor</span>(...) : WospBaseProxy() {
+
+    <span class="kw">private var</span> systemBinder: IContainerCommunicationInterface? = <span class="kw">null</span>
+    <span class="kw">private var</span> bindAttempts = 0
+    <span class="kw">private val</span> RETRY_DELAY_MS   = 500L
+    <span class="kw">private val</span> MAX_RETRY        = 5
+
+    <span class="c">// Messages that arrived before connection was ready</span>
+    <span class="kw">private val</span> pendingQueue = ConcurrentLinkedQueue&lt;Pair&lt;Int, String&gt;&gt;()
+
+    <span class="kw">private val</span> connection = <span class="kw">object</span> : ServiceConnection {
+
+        <span class="kw">override fun</span> onServiceConnected(name: ComponentName, service: IBinder) {
+            bindAttempts = 0
+            systemBinder = IContainerCommunicationInterface.Stub.asInterface(service)
+            systemBinder?.registerMessage(UserInfoHelper.cid, msgCallback)
+            <span class="c">// Flush messages queued while disconnected</span>
+            <span class="kw">while</span> (pendingQueue.isNotEmpty()) {
+                pendingQueue.poll()?.let { (cmd, data) ->
+                    systemBinder?.sendMessage(UserInfoHelper.cid, cmd, data)
+                }
+            }
+        }
+
+        <span class="kw">override fun</span> onServiceDisconnected(name: ComponentName) {
+            systemBinder = <span class="kw">null</span>
+            if (bindAttempts &lt; MAX_RETRY) scheduleRebind()
+        }
+    }
+
+    <span class="kw">private fun</span> scheduleRebind() {
+        bindAttempts++
+        <span class="c">// Coroutine delay — non-blocking, no Handler boilerplate</span>
+        CoroutineScope(Dispatchers.IO).launch {
+            delay(RETRY_DELAY_MS * bindAttempts)   <span class="c">// linear back-off</span>
+            withContext(Dispatchers.Main) { bind() }
+        }
+    }
+
+    fun sendWebosData(msgId: Int, msg: WospMsg) {
+        <span class="kw">val</span> json = WospMsgConverter.convertWospMsgToJsonString(msg)
+        if (systemBinder == <span class="kw">null</span>) {
+            pendingQueue.add(msgId to json)   <span class="c">// queue until reconnected</span>
+        } else {
+            systemBinder?.sendMessage(UserInfoHelper.cid, msgId, json)
+        }
+    }
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4>Why Coroutines over Handler.postDelayed?</h4>
+        <p><code>Handler.postDelayed()</code> requires a <code>Looper</code> and manual cancellation.
+        A coroutine <code>delay()</code> is non-blocking, cancellable, and composable with other async
+        logic. The <code>CoroutineScope(Dispatchers.IO)</code> keeps the retry off the main thread.</p>
+      </div>
+      <div class="card">
+        <h4>Linear Back-off</h4>
+        <p>Retry delay grows linearly (<code>500ms × attempt</code>): 500ms, 1s, 1.5s... up to 5 attempts.
+        This avoids storming the system service with rapid reconnect attempts immediately after a crash.</p>
+      </div>
+      <div class="card">
+        <h4>Message Queue</h4>
+        <p>A <code>ConcurrentLinkedQueue</code> buffers outgoing messages during disconnection.
+        On reconnect, the queue is flushed in order — no messages are lost even during a system service restart.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Hilt DI -->
+  <section class="detail-section" id="hilt">
+    <h2>6. Dependency Injection with Hilt</h2>
+    <p>
+      All proxies and managers are <code>@Singleton</code> Hilt-managed instances. This ensures a single
+      shared instance across the process, eliminates manual lifecycle management, and makes unit testing
+      straightforward — Hilt can replace any proxy with a fake during tests.
+    </p>
+    <pre><code><span class="c">// ServiceApplication.kt — entry point</span>
+<span class="kw">@HiltAndroidApp</span>
+<span class="kw">class</span> ServiceApplication : Application()
+
+<span class="c">// WebosProjectionService.kt — injection target</span>
+<span class="kw">@AndroidEntryPoint</span>
+<span class="kw">class</span> WebosProjectionService : Service() {
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> mWospSystemProxy: WospSystemProxy
+    <span class="c">// ... injected lazily by Hilt on onCreate()</span>
+}</code></pre>
+    <p style="margin-top:0.75rem;">
+      Because managers subscribe to proxies in their <code>init{}</code> blocks — and Hilt constructs
+      all singletons when the service starts — all subscriptions are wired up before the first message
+      can arrive. There is no initialization ordering problem.
+    </p>
+  </section>
+
+  <!-- 7. Why -->
+  <section class="detail-section" id="why">
+    <h2>7. Why These Choices?</h2>
+    <table>
+      <thead>
+        <tr><th>Choice</th><th>Alternatives Considered</th><th>Reason Selected</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Proxy/Manager separation</td>
+          <td>Monolithic service class with all logic inline</td>
+          <td>Clear separation of concerns: proxies know how to <em>get</em> data; managers know what to <em>do</em> with it.
+          Each class is under 200 lines and independently testable.</td>
+        </tr>
+        <tr>
+          <td>Subscription model (<code>WospBaseProxy</code>)</td>
+          <td>Direct method calls from proxy to manager</td>
+          <td>Adding a new manager never requires changing proxy code.
+          A manager subscribes to many proxies without creating circular dependencies.</td>
+        </tr>
+        <tr>
+          <td>Coroutine back-off reconnect</td>
+          <td><code>AlarmManager</code>, <code>JobScheduler</code>, <code>Handler.postDelayed()</code></td>
+          <td>Coroutines are lightweight, cancellable, and integrate naturally with Kotlin.
+          <code>delay()</code> suspends without blocking threads.</td>
+        </tr>
+        <tr>
+          <td>START_STICKY service</td>
+          <td>Foreground service with persistent notification</td>
+          <td>Automotive head units do not have a traditional notification shade.
+          <code>START_STICKY</code> ensures the system restarts the service after any kill without user-visible notifications.</td>
+        </tr>
+        <tr>
+          <td>Hilt for DI</td>
+          <td>Manual singleton pattern, Koin</td>
+          <td>Hilt is the official Android DI framework; integrates natively with <code>@AndroidEntryPoint</code>
+          and produces compile-time validated dependency graphs.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer class="detail-footer">
+  <p>WebOS Projection Android BMW — Projection Service &nbsp;|&nbsp; LG Electronics</p>
+</footer>
+</body>
+</html>

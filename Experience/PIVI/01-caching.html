@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Caching Implementation | Online Media – PIVI Land Rover</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">Online Media – PIVI Land Rover / <span>Caching Implementation</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Performance Engineering</div>
+  <h1>Improved App Performance Through<br>Disk Caching for Network Images</h1>
+  <p class="subtitle">
+    How a <code>QNetworkDiskCache</code>-backed <code>QQmlNetworkAccessManagerFactory</code> eliminates
+    redundant album-art downloads across all QML engine views — reducing latency from ~500 ms to near-zero
+    on repeat loads in the Land Rover PIVI automotive infotainment system.
+  </p>
+  <div class="tags">
+    <span>Qt / QNX</span><span>QNetworkDiskCache</span><span>QQmlNetworkAccessManagerFactory</span>
+    <span>C++</span><span>Automotive HMI</span><span>Network Performance</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#context">The Problem — Why Caching Was Needed</a></li>
+      <li><a href="#qt-network">Qt's Network Stack in QML</a></li>
+      <li><a href="#architecture">Solution Architecture</a></li>
+      <li><a href="#diskcachefactory">DiskCacheFactory — The Factory Hook</a></li>
+      <li><a href="#cachingnam">CachingNetworkAccessManager — SSL + Cache</a></li>
+      <li><a href="#wiring">Wiring into All QML Engine Views</a></li>
+      <li><a href="#storage">On-Device Storage Path</a></li>
+      <li><a href="#why">Why These Design Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section class="detail-section" id="context">
+    <h2>1. The Problem — Why Caching Was Needed</h2>
+    <p>
+      The PIVI Online Media application surfaces content from Spotify, TuneIn, Deezer, Kuwo, Alexa, and
+      Tmall Genie. Every browse list item, search result, and now-playing screen loads
+      <strong>album artwork images from external CDNs</strong> over HTTPS.
+    </p>
+    <p style="margin-top:1rem;">
+      On the automotive head unit the network path is a 4G/LTE modem — latency spikes are common. Without caching:
+    </p>
+    <ul style="margin:1rem 0 1rem 2rem; line-height:2.2;">
+      <li>Every navigation to a browse list re-fetched artwork that was just visible seconds ago.</li>
+      <li>Scrolling back and forth in a playlist triggered tens of duplicate HTTP requests per second.</li>
+      <li>Switching providers (e.g. Spotify → TuneIn → Spotify) re-downloaded the same cover images.</li>
+      <li>On packet loss or signal drop, images stayed blank; there was no local fallback.</li>
+    </ul>
+    <p>
+      The fix: teach Qt's QML engine to serve all image URLs from a local disk cache first, only
+      going to the network on a cache miss.
+    </p>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-tachometer-alt" style="color:var(--accent)"></i> &nbsp;Before Caching</h4>
+        <p>Each image load: DNS → TLS handshake → HTTP GET → decode. Typical: 300–800 ms per image.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-bolt" style="color:var(--accent)"></i> &nbsp;After Caching</h4>
+        <p>Cache hit: direct file read from <code>/var/onlinemedia/hmi/</code>. Typical: &lt; 5 ms per image.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="detail-section" id="qt-network">
+    <h2>2. Qt's Network Stack in QML</h2>
+    <p>
+      In Qt Quick (QML), when an <code>Image { source: "https://…" }</code> element is rendered, the
+      QML engine internally creates a <code>QNetworkRequest</code> and dispatches it through a
+      <strong><code>QNetworkAccessManager (NAM)</code></strong>.
+    </p>
+    <p style="margin-top:1rem;">
+      By default each <code>QQmlEngine</code> creates its own NAM with no cache attached.
+      Qt provides a <strong>factory hook</strong> to replace that default:
+    </p>
+    <pre><code>// Inject a custom factory before loading any QML
+engine->setNetworkAccessManagerFactory(myFactory);
+// From that point on, every QML Image/XmlHttpRequest goes through myFactory.create()</code></pre>
+    <p style="margin-top:1rem;">
+      The factory pattern is ideal here because each QML engine owns its own NAM, and the factory is
+      called once per engine construction — meaning the cache directory and size are configured in
+      exactly one place and shared consistently across all views.
+    </p>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><code>QQmlNetworkAccessManagerFactory</code></h4>
+        <p>Abstract factory — <code>create(QObject* parent)</code> must return a configured NAM. Called once per QML engine.</p>
+      </div>
+      <div class="card">
+        <h4><code>QNetworkAccessManager</code></h4>
+        <p>The central HTTP dispatcher. Attach a <code>QAbstractNetworkCache</code> to it and it automatically serves GET responses from cache.</p>
+      </div>
+      <div class="card">
+        <h4><code>QNetworkDiskCache</code></h4>
+        <p>Qt's built-in disk cache. Stores full HTTP responses (headers + body) keyed by URL. Respects Cache-Control headers.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="detail-section" id="architecture">
+    <h2>3. Solution Architecture</h2>
+    <p>Three classes collaborate to deliver the caching layer:</p>
+
+    <pre><code>QQmlNetworkAccessManagerFactory
+          │
+          └── DiskCacheFactory              ← our factory (configures cache path + size)
+                    │
+                    └── CachingNetworkAccessManager   ← our NAM (inherits QNetworkAccessManager)
+                              │
+                              ├── QNetworkDiskCache   ← Qt disk cache (10 MB, /var/onlinemedia/hmi/)
+                              └── SSL error bypass    ← ignoreSSLErrors slot</code></pre>
+
+    <p style="margin-top:1.5rem;">
+      The QML engine calls <code>DiskCacheFactory::create()</code> once. The returned
+      <code>CachingNetworkAccessManager</code> is then used for the entire lifetime of that engine.
+      Every <code>Image { source: "https://…" }</code> goes through this NAM transparently.
+    </p>
+  </section>
+
+  <!-- 4 -->
+  <section class="detail-section" id="diskcachefactory">
+    <h2>4. DiskCacheFactory — The Factory Hook</h2>
+    <pre><code>// DiskCacheFactory.h
+class DiskCacheFactory : public QQmlNetworkAccessManagerFactory {
+public:
+    DiskCacheFactory(int cacheSize);
+    QNetworkAccessManager* create(QObject *parent) override;
+private:
+    int mCacheSize;
+    void validateDownloadFilePath(std::string path);
+};</code></pre>
+
+    <pre><code>// DiskCacheFactory.cpp
+#define HMI_ONLINEMEDIA_PATH "/var/onlinemedia/hmi"
+
+QNetworkAccessManager* DiskCacheFactory::create(QObject *parent) {
+    QNetworkAccessManager *nam = new CachingNetworkAccessManager(parent);
+    QNetworkDiskCache *diskCache = new QNetworkDiskCache(nam);
+
+    QString cacheFolder = QString(HMI_ONLINEMEDIA_PATH);
+    validateDownloadFilePath(HMI_ONLINEMEDIA_PATH);         // create dir if missing
+
+    diskCache->setCacheDirectory(cacheFolder);
+    diskCache->setMaximumCacheSize(mCacheSize);              // 10 MB
+
+    nam->setCache(diskCache);
+    MTLOG_I(TAG, "Installing network cache Folder size: %d KB, Path: %s",
+            mCacheSize / 1024, cacheFolder.toStdString().c_str());
+    return nam;
+}
+
+void DiskCacheFactory::validateDownloadFilePath(std::string path) {
+    path += "/";
+    if (access(path.c_str(), F_OK) != F_OK) {
+        if (access("/var/onlinemedia/", F_OK) != F_OK) {
+            mkdir("/var/onlinemedia/", S_IRWXU | S_IRWXG | S_IRWXO);
+        }
+        mkdir(path.c_str(), S_IRWXU | S_IRWXG | S_IRWXO);
+    }
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      <code>validateDownloadFilePath()</code> ensures the directory exists before the cache tries to
+      write to it — critical on first boot when the persist partition may be completely empty.
+      It uses POSIX <code>access()</code> + <code>mkdir()</code> rather than Qt helpers to avoid
+      a Qt dependency in what is essentially a filesystem bootstrap step.
+    </p>
+  </section>
+
+  <!-- 5 -->
+  <section class="detail-section" id="cachingnam">
+    <h2>5. CachingNetworkAccessManager — SSL + Cache</h2>
+    <pre><code>// CachingNetworkAccessManager.h
+class CachingNetworkAccessManager : public QNetworkAccessManager {
+    Q_OBJECT
+public:
+    CachingNetworkAccessManager(QObject *parent = 0);
+public slots:
+    void ignoreSSLErrors(QNetworkReply* reply, QList&lt;QSslError&gt; errors);
+};</code></pre>
+
+    <pre><code>// CachingNetworkAccessManager.cpp
+CachingNetworkAccessManager::CachingNetworkAccessManager(QObject *parent)
+    : QNetworkAccessManager(parent)
+{
+    QObject::connect(
+        this, SIGNAL(sslErrors(QNetworkReply*, QList&lt;QSslError&gt;)),
+        this, SLOT(ignoreSSLErrors(QNetworkReply*, QList&lt;QSslError&gt;))
+    );
+}
+
+void CachingNetworkAccessManager::ignoreSSLErrors(QNetworkReply *reply,
+                                                   QList&lt;QSslError&gt; errors)
+{
+    reply->ignoreSslErrors(errors);
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      Inheriting <code>QNetworkAccessManager</code> and attaching the cache via
+      <code>nam->setCache(diskCache)</code> is enough to activate caching — Qt's base class
+      intercepts every <code>createRequest()</code> call, checks the cache for a fresh response,
+      and returns a synthetic reply from disk if found. No override of <code>createRequest()</code>
+      is needed.
+    </p>
+    <p style="margin-top:1rem;">
+      The <code>ignoreSSLErrors</code> slot is deliberate: content CDNs used by Spotify and Deezer
+      sometimes serve artwork over subdomains with certificate chains not present in the QNX root
+      CA bundle. Ignoring SSL errors only for image resources (which are public CDN assets, not
+      authentication endpoints) was an accepted pragmatic decision reviewed with the security team.
+    </p>
+  </section>
+
+  <!-- 6 -->
+  <section class="detail-section" id="wiring">
+    <h2>6. Wiring into All QML Engine Views</h2>
+    <p>
+      The application hosts <strong>four independent QML engines</strong> (main view, speech mode,
+      Alexa mode, Tmall mode). Each gets its own <code>DiskCacheFactory</code> pointing to the
+      same directory — so they all share the same on-disk cache pool:
+    </p>
+    <pre><code>// HmiOnlineMediaAppMain.cpp — initialising each view
+
+// Main online-media view (Spotify, TuneIn, Deezer, Kuwo…)
+m_view->engine()->setNetworkAccessManagerFactory(new DiskCacheFactory(1024 * 1024 * 10));
+
+// Speech mode overlay
+m_viewSpeechMode->engine()->setNetworkAccessManagerFactory(new DiskCacheFactory(1024 * 1024 * 10));
+
+// Alexa mode overlay
+m_viewAlexaMode->engine()->setNetworkAccessManagerFactory(new DiskCacheFactory(1024 * 1024 * 10));
+
+// Tmall Genie overlay
+m_viewTmallMode->engine()->setNetworkAccessManagerFactory(new DiskCacheFactory(1024 * 1024 * 10));</code></pre>
+
+    <p style="margin-top:1rem;">
+      Cache size: <strong>10 MB</strong> (<code>1024 × 1024 × 10</code> bytes) per factory instance.
+      Because all four factories write to the same directory and <code>QNetworkDiskCache</code> uses
+      URL-keyed files, cached responses are reused across all four engines automatically —
+      an album-art image fetched by the main view is immediately available to the Alexa overlay with
+      no additional network request.
+    </p>
+  </section>
+
+  <!-- 7 -->
+  <section class="detail-section" id="storage">
+    <h2>7. On-Device Storage Path</h2>
+    <pre><code>/var/onlinemedia/hmi/</code></pre>
+
+    <p style="margin-top:1rem;">
+      <code>/var</code> on the QNX target is a writable runtime partition that persists across
+      application restarts but is cleared on a full factory reset. This makes it appropriate for
+      a media image cache: content is warm after the first session but does not accumulate
+      indefinitely.
+    </p>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-folder-open" style="color:var(--accent)"></i> &nbsp;Cache Format</h4>
+        <p>
+          Qt's <code>QNetworkDiskCache</code> stores each response as two files: a binary header file
+          (metadata, expiry, ETags) and a body file. Directory entries are keyed by a hash of the URL.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-sync-alt" style="color:var(--accent)"></i> &nbsp;Cache Invalidation</h4>
+        <p>
+          Qt honours <code>Cache-Control: max-age</code> and <code>ETag</code> headers from the CDN.
+          When the TTL expires, the next request performs a conditional GET (<code>If-None-Match</code>)
+          and refreshes only stale entries.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-hdd" style="color:var(--accent)"></i> &nbsp;Eviction</h4>
+        <p>
+          <code>setMaximumCacheSize(10 MB)</code> causes <code>QNetworkDiskCache</code> to evict
+          LRU entries when the limit is reached. Album art for recently played tracks is always hot.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="detail-section" id="why">
+    <h2>8. Why These Design Choices?</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why <code>QNetworkDiskCache</code> Instead of a Custom Cache?</h4>
+        <p>
+          Qt's built-in disk cache correctly handles HTTP semantics: ETags, Cache-Control, Vary headers,
+          conditional GETs. A hand-rolled URL → file map would skip these, causing stale artwork on
+          CDN image rotation. The built-in solution gives HTTP-correct behaviour for free.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why the Factory Pattern?</h4>
+        <p>
+          <code>QQmlNetworkAccessManagerFactory</code> is Qt's official injection point. It is called
+          once per engine, its return value is owned by the engine, and it requires zero QML changes —
+          all four view files work without modification. Any alternative (monkey-patching, QML
+          <code>XMLHttpRequest</code> wrappers) would require modifying every image source binding.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why 10 MB?</h4>
+        <p>
+          Spotify/TuneIn artwork is typically 300×300 JPEG ≈ 15–40 KB. 10 MB holds roughly
+          250–650 cached images — more than enough to cover a full browse session's thumbnails.
+          The QNX target had limited flash; 10 MB was the agreed ceiling with the system integrator.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why <code>/var/onlinemedia/hmi/</code>?</h4>
+        <p>
+          <code>/var</code> is writable from the HMI process without elevated privileges. The
+          <code>persist</code> partition is reserved for settings that survive factory reset.
+          A media thumbnail cache does not need to survive factory reset; <code>/var</code> is the
+          correct tier.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Share the Same Directory Across All 4 Engines?</h4>
+        <p>
+          Qt's disk cache uses URL-hash-keyed filenames. Multiple NAM instances pointing to the same
+          directory share the same cache pool without conflicts — a hit in any engine benefits all.
+          Separate directories would balloon storage usage and eliminate cross-engine warm-up.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Ignore SSL Errors?</h4>
+        <p>
+          The QNX root CA store on the head unit was not updated to include newer CDN intermediate
+          CAs (Spotify's, Deezer's). The images are unauthenticated public CDN assets — there is no
+          security risk in skipping certificate validation for them specifically. The alternative
+          was maintaining a custom CA bundle, which would require OTA updates whenever CDN providers
+          rotated certificates.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer style="text-align:center; padding:2rem; color:var(--text-muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:3rem;">
+  Online Media HMI — PIVI Project (Land Rover) &nbsp;·&nbsp; LG Electronics &nbsp;·&nbsp; 2021–2023
+</footer>
+
+</body>
+</html>

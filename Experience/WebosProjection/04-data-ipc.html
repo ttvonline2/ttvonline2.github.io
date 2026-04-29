@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Data &amp; IPC – AIDL + JSON Polymorphism | WebOS Projection Android BMW</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">WebOS Projection BMW / <span>Data &amp; IPC</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">IPC &amp; Data Design</div>
+  <h1>Data &amp; IPC: Standardized AIDL<br>with JSON Polymorphic Deserialization</h1>
+  <p class="subtitle">
+    How a uniform AIDL transport layer carries all inter-process messages as JSON strings,
+    and how a single <code>msgId</code>-driven deserialization engine reconstructs every message
+    into its correct strongly-typed Kotlin data class — across three separate processes.
+  </p>
+  <div class="tags">
+    <span>AIDL</span><span>Gson</span><span>Polymorphic JSON</span>
+    <span>Sealed Classes</span><span>Message ID Dispatch</span><span>Type Safety</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#challenge">The IPC Challenge</a></li>
+      <li><a href="#aidl-standard">AIDL Standardized Across All Layers</a></li>
+      <li><a href="#wospmsg">WospMsg — the Type Hierarchy</a></li>
+      <li><a href="#msgid">Message ID as Type Discriminator</a></li>
+      <li><a href="#converter">WospMsgConverter — Polymorphic Deserialization</a></li>
+      <li><a href="#flow">End-to-End Data Flow</a></li>
+      <li><a href="#why">Why These Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. Challenge -->
+  <section class="detail-section" id="challenge">
+    <h2>1. The IPC Challenge</h2>
+    <p>
+      The system spans <strong>three separate Android processes</strong> and a native C++ bus — all needing
+      to exchange structured data objects:
+    </p>
+    <div class="card-grid">
+      <div class="card">
+        <h4>webosprojectionhmi</h4>
+        <p>HMI app process — sends lifecycle, key events, overlay commands.</p>
+      </div>
+      <div class="card">
+        <h4>webosprojectionservice</h4>
+        <p>Service process — central broker, all message routing logic.</p>
+      </div>
+      <div class="card">
+        <h4>webossystemservice</h4>
+        <p>System service process — owns JNI, bridges to native LCP bus.</p>
+      </div>
+    </div>
+    <p style="margin-top:1rem;">
+      A Binder/AIDL call can only transfer <em>primitive types</em> and <em>Parcelables</em> natively.
+      Sending 50+ different structured message types across process boundaries without a separate
+      <code>Parcelable</code> class for each one requires a different approach.
+      The solution: <strong>serialize every message to a JSON string at the AIDL boundary, and
+      deserialize back to the correct typed class on the receiving side using the message ID as a discriminator.</strong>
+    </p>
+  </section>
+
+  <!-- 2. AIDL Standard -->
+  <section class="detail-section" id="aidl-standard">
+    <h2>2. AIDL Standardized Across All Layers</h2>
+    <p>
+      Both AIDL boundaries use the <em>same wire format</em>: <code>(int msgId, String jsonData)</code>.
+      This makes the two interfaces composable — a message can be forwarded from one interface to the next
+      without any transformation, just a re-dispatch.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">Interface 1: HMI app → Projection Service</h3>
+    <pre><code><span class="c">// IWebosProjection.aidl</span>
+interface IWebosProjection {
+    void registerWebosProjectionListener(in IWebosProjectionListener listener);
+    void unRegisterWebosProjectionListener(in IWebosProjectionListener listener);
+    String getWebosData(int msgId);
+    void sendWebosData(int msgId, in String data);   <span class="c">// &lt;-- (msgId, JSON)</span>
+}</code></pre>
+
+    <h3 style="margin-top:1.5rem;">Interface 2: Projection Service → System Service</h3>
+    <pre><code><span class="c">// IContainerCommunicationInterface.aidl</span>
+interface IContainerCommunicationInterface {
+    interface IMessageCallback {
+        void onCallback(int cmd, String msg);          <span class="c">// &lt;-- same (msgId, JSON)</span>
+    }
+    boolean sendMessage(int cid, int cmd, String data);  <span class="c">// &lt;-- same wire format</span>
+    String  getSystemData(int cmd);
+    <span class="c">// ...registration methods</span>
+}</code></pre>
+
+    <div class="insight-box" style="margin-top:1rem;">
+      <strong><i class="fas fa-lightbulb"></i> Uniform wire format benefit:</strong>
+      Because both AIDL interfaces share <code>(int, String)</code>, a message arriving from WebOS
+      via the system service can be forwarded to the HMI app via the projection service without any
+      deserialization in the middle layer — simply relay <code>(cmd, data)</code> as-is.
+      Deserialization only happens at the final consumer.
+    </div>
+  </section>
+
+  <!-- 3. WospMsg -->
+  <section class="detail-section" id="wospmsg">
+    <h2>3. WospMsg — the Type Hierarchy</h2>
+    <p>
+      All messages implement a single marker interface, <code>WospMsg</code>. Each concrete message is a
+      Kotlin <code>data class</code> with exactly the fields defined in the protocol spec.
+    </p>
+
+    <pre><code><span class="c">// WospMsg.kt</span>
+interface WospMsg {
+    <span class="kw">val</span> msgId: Int
+}
+
+<span class="c">// Example: a fragment of WospSystemMsg.kt</span>
+data <span class="kw">class</span> HccContainerReportLaunchApp(
+    <span class="kw">val</span> id: String,
+    <span class="kw">val</span> returnValue: Boolean
+) : WospMsg {
+    <span class="kw">override val</span> msgId = WospMsgID.HccContainerReportLaunchApp   <span class="c">// 1001</span>
+}
+
+data <span class="kw">class</span> HccHostRespondNetworkInfo(
+    <span class="kw">val</span> wifi: WifiInfo?,
+    <span class="kw">val</span> cellular: CellularInfo?,
+    <span class="kw">val</span> type: String,
+    <span class="kw">val</span> isInternetConnectionAvailable: Boolean
+) : WospMsg {
+    <span class="kw">override val</span> msgId = WospMsgID.HccHostRespondNetworkInfo   <span class="c">// 2503</span>
+}
+
+<span class="c">// Fallback for unknown message IDs</span>
+data <span class="kw">class</span> UnknownMessage(<span class="kw">override val</span> msgId: Int = -1) : WospMsg</code></pre>
+
+    <p style="margin-top:0.75rem;">
+      The <code>WospMsg</code> interface is a lightweight contract — it only requires <code>msgId</code>.
+      No <code>Parcelable</code> implementation, no Binder-specific boilerplate. Each message class is
+      a pure Kotlin data class serializable with Gson out of the box.
+    </p>
+  </section>
+
+  <!-- 4. MsgID -->
+  <section class="detail-section" id="msgid">
+    <h2>4. Message ID as Type Discriminator</h2>
+    <p>
+      Because JSON itself carries no type information beyond field names, a separate mechanism is needed
+      to know which Kotlin class to deserialize into. The <code>msgId</code> integer already present on
+      the wire serves as the type discriminator.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">WospMsgID — the master enum</h3>
+    <pre><code><span class="c">// KeyMessageID.kt (enum object WospMsgID)</span>
+object WospMsgID {
+    <span class="c">// HCC messages: WebOS ↔ Android container</span>
+    const val HccContainerReportLaunchApp           = 1001
+    const val HccContainerNotifyBootComplete        = 1003
+    const val HccContainerCommandAudioControl       = 1004
+    const val HccContainerRequestWebosScreenFocusValue = 1031
+    const val HccHostRespondWebosScreenFocus        = 1531
+    const val HccContainerRequestNetworkOnOff       = 2002
+    const val HccHostNotifyNetworkOnOff             = 2502
+    <span class="c">// ... 40+ more message IDs</span>
+
+    <span class="c">// HMI internal messages</span>
+    const val HmiNotifyLifecycle    = 90102
+    const val HmiNotifyKeyInformation = 90103
+
+    <span class="c">// System service data commands</span>
+    const val SysGetVersionInfo     = 101
+    const val SysGetNetworkOnOff    = 102
+    const val SysGetRegion          = 103
+    const val SysGetLanguage        = 104
+    const val SysGetNetworkInfo     = 105
+}</code></pre>
+
+    <p style="margin-top:0.75rem;">
+      The ID ranges reveal the message origin: <strong>1xxx–4xxx</strong> = HCC (inter-container protocol
+      messages to/from WebOS); <strong>9xxxx</strong> = HMI internal messages; <strong>1xx</strong> = system
+      service queries; <strong>3xxxx</strong> = Bluetooth; <strong>5xxxx</strong> = network.
+    </p>
+  </section>
+
+  <!-- 5. Converter -->
+  <section class="detail-section" id="converter">
+    <h2>5. WospMsgConverter — Polymorphic Deserialization</h2>
+    <p>
+      <code>WospMsgConverter</code> is a singleton that holds the registry mapping every <code>msgId</code>
+      to its corresponding Kotlin class, and performs the actual Gson deserialization.
+    </p>
+
+    <pre><code><span class="c">// WospMsgConverter.kt</span>
+object WospMsgConverter {
+
+    <span class="c">// ── Type registry: msgId → Kotlin data class ──────────────────────────</span>
+    <span class="kw">private val</span> msgTypeMap: Map&lt;Int, Class&lt;<span class="kw">out</span> WospMsg&gt;&gt; = mapOf(
+        WospMsgID.HccContainerReportLaunchApp      to HccContainerReportLaunchApp::<span class="kw">class</span>.java,
+        WospMsgID.HccContainerCommandAudioControl  to HccContainerCommandAudioControl::<span class="kw">class</span>.java,
+        WospMsgID.HccHostRespondNetworkInfo        to HccHostRespondNetworkInfo::<span class="kw">class</span>.java,
+        WospMsgID.HmiNotifyLifecycle               to HmiNotifyLifecycle::<span class="kw">class</span>.java,
+        WospMsgID.NetworkGetStatusOnOff            to NetworkGetStatusOnOff::<span class="kw">class</span>.java,
+        WospMsgID.BluetoothDeviceStateChanged      to BluetoothDeviceStateChanged::<span class="kw">class</span>.java,
+        <span class="c">// ... all 50+ message types</span>
+    )
+
+    <span class="kw">private val</span> gson = Gson()
+
+    <span class="c">// ── Deserialization: JSON → WospMsg ───────────────────────────────────</span>
+    fun convertJsonStringToWospMsg(msgId: Int, json: String): WospMsg {
+        <span class="kw">val</span> clazz = msgTypeMap[msgId] ?: <span class="kw">return</span> UnknownMessage(msgId)
+        <span class="kw">return</span> gson.fromJson(json, clazz) ?: UnknownMessage(msgId)
+    }
+
+    <span class="c">// ── Serialization: WospMsg → JSON ─────────────────────────────────────</span>
+    fun convertWospMsgToJsonString(wospMsg: WospMsg): String {
+        <span class="c">// Exclude msgId from the payload — it travels separately as the int parameter</span>
+        <span class="kw">val</span> exclusion = ExclusionStrategy {
+            it.name == <span class="str">"msgId"</span>
+        }
+        <span class="kw">return</span> GsonBuilder()
+            .addSerializationExclusionStrategy(exclusion)
+            .create()
+            .toJson(wospMsg)
+    }
+}</code></pre>
+
+    <h3 style="margin-top:1.5rem;">How deserialization is used in WospHmiProxy</h3>
+    <pre><code><span class="c">// WospHmiProxy.kt — the HMI-facing AIDL stub</span>
+<span class="kw">val</span> wospServiceImpl = <span class="kw">object</span> : IWebosProjection.Stub() {
+
+    <span class="kw">override fun</span> sendWebosData(msgId: Int, data: String) {
+        <span class="c">// Step 1: reconstruct the typed message from (msgId, JSON)</span>
+        <span class="kw">val</span> wospMsg = WospMsgConverter.convertJsonStringToWospMsg(msgId, data)
+
+        <span class="c">// Step 2: dispatch to all listeners registered for this msgId</span>
+        dispatchToProxyListener(msgId, wospMsg)
+        <span class="c">// → managers receive a WospMsg and cast to the expected subtype</span>
+    }
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4>Why msgId outside the JSON?</h4>
+        <p>Keeping <code>msgId</code> as a separate AIDL parameter (not embedded in the JSON body) means
+        the routing layer can read the ID without parsing JSON at all — a cheap integer comparison routes
+        the message before any deserialization work happens.</p>
+      </div>
+      <div class="card">
+        <h4>Why Gson over Kotlinx-Serialization?</h4>
+        <p>The project targets Android SDK 33-35 and the LGE toolchain already ships Gson. More importantly,
+        Gson's reflection-based deserialization works directly with the existing data classes with zero
+        additional annotations — Kotlinx Serialization would require <code>@Serializable</code> on every
+        class across hundreds of message types.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Flow -->
+  <section class="detail-section" id="flow">
+    <h2>6. End-to-End Data Flow</h2>
+    <p>Tracing a message from HMI app to WebOS container:</p>
+
+    <pre><code><span class="c">// ① HMI app creates a typed message and sends it</span>
+wospManager.sendMessage(WebosInternalMessage.HmiLifeCycle(state = "onResume"))
+<span class="c">// → serialized: msgId=90102, json='{"state":"onResume"}'
+// → IWebosProjection.sendWebosData(90102, '{"state":"onResume"}')</span>
+
+<span class="c">// ② WospHmiProxy receives (in service process)</span>
+WospMsgConverter.convertJsonStringToWospMsg(90102, '{"state":"onResume"}')
+<span class="c">// → returns HmiNotifyLifecycle(state="onResume") : WospMsg</span>
+<span class="c">// → dispatched to WospFocusManager via subscription</span>
+
+<span class="c">// ③ WospFocusManager reacts, sends response to WebOS</span>
+mWospSystemProxy.sendWebosData(
+    WospMsgID.HccHostRespondWebosScreenFocus,
+    HccHostRespondWebosScreenFocus(iFocused = true)
+)
+<span class="c">// → WospMsgConverter serializes: '{"iFocused":true}'
+// → IContainerCommunicationInterface.sendMessage(cid=1, cmd=1531, '{"iFocused":true}')</span>
+
+<span class="c">// ④ ContainerCommunicationStub forwards to native</span>
+Communicator.connection.sendMessage(cid=1, cmd=1531, '{"iFocused":true}')
+<span class="c">// → LcpCommunicator.sendMessage(HCC_MANAGER1, 1531, '{"iFocused":true}')</span>
+<span class="c">// → JNI native call → LCP bus → WebOS container</span></code></pre>
+
+    <div class="insight-box" style="margin-top:1rem;">
+      <strong><i class="fas fa-lightbulb"></i> The entire round trip across 3 processes and 1 JNI boundary
+      uses the single uniform wire format:</strong> <code>(int msgId, String json)</code>.
+      No special Parcelables, no protobuf, no custom serialization format — just JSON over AIDL Binder.
+    </div>
+  </section>
+
+  <!-- 7. Why -->
+  <section class="detail-section" id="why">
+    <h2>7. Why These Choices?</h2>
+    <table>
+      <thead>
+        <tr><th>Choice</th><th>Alternatives Considered</th><th>Reason Selected</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>JSON over AIDL (<code>int, String</code>)</td>
+          <td>Individual Parcelable per message type; Protobuf; custom binary format</td>
+          <td>50+ message types → 50 Parcelable classes is unmaintainable. JSON requires zero boilerplate
+          per type. Protobuf requires schema files and code generation. JSON is human-readable for debugging.</td>
+        </tr>
+        <tr>
+          <td>msgId as type discriminator (outside JSON)</td>
+          <td>Embed a <code>"type"</code> field inside the JSON body</td>
+          <td>Routing decisions need the type before parsing the body. An integer header check is O(1)
+          and avoids a full JSON parse just to determine which manager to route to.</td>
+        </tr>
+        <tr>
+          <td>Static registry map in WospMsgConverter</td>
+          <td>Reflection-only deserialization; annotation-based polymorphism (GsonTypeAdapterFactory)</td>
+          <td>An explicit map is compile-time verifiable — missing a message type is a compile warning,
+          not a silent runtime <code>null</code>. It also documents every supported message in one place.</td>
+        </tr>
+        <tr>
+          <td>WospMsg marker interface (not sealed class)</td>
+          <td>Sealed hierarchy per domain</td>
+          <td>Messages span multiple files (system, HMI, audio, Bluetooth). A sealed class requires all
+          subtypes in the same file. An interface allows the hierarchy to span files while still providing
+          a common type for the registry and dispatcher.</td>
+        </tr>
+        <tr>
+          <td>Same AIDL wire format on both interfaces</td>
+          <td>Different interfaces with typed parameters</td>
+          <td>Forwarding messages between layers requires zero transformation — just relay
+          <code>(cmd, data)</code>. Reduces the chance of conversion bugs at layer boundaries.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer class="detail-footer">
+  <p>WebOS Projection Android BMW — Data &amp; IPC &nbsp;|&nbsp; LG Electronics</p>
+</footer>
+</body>
+</html>

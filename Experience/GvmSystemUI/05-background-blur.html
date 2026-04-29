@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Background Blur | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Background Blur</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">SurfaceFlinger / Rendering</div>
+  <h1>Hardware-Accelerated Background Blur<br>via SurfaceFlinger</h1>
+  <p class="subtitle">How a single system property enables GPU-level background blur, and how the QuickControl panel uses WindowManager flags and animated radius values to create a frosted-glass panel effect with zero CPU overhead.</p>
+  <div class="tags">
+    <span>ro.surface_flinger.supports_background_blur</span><span>FLAG_BLUR_BEHIND</span>
+    <span>blurBehindRadius</span><span>ValueAnimator</span><span>SurfaceFlinger</span><span>RenderEffect</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">Why Blur?</a></li>
+      <li><a href="#system-property">Enabling Blur: System Property</a></li>
+      <li><a href="#window-flags">Window Flags for Blur</a></li>
+      <li><a href="#animation">Animated Blur Radius</a></li>
+      <li><a href="#display-tuning">Per-Display Blur Radius Tuning</a></li>
+      <li><a href="#why">Why Not CPU-based Blur?</a></li>
+    </ol>
+  </nav>
+
+  <section class="detail-section" id="problem">
+    <h2>1. Why Blur?</h2>
+    <p>The QuickControl panel overlays the entire screen content. Without any treatment of the content behind it, the result is a harsh opaque overlay that visually disconnects from the running application. Modern automotive UX guidelines (and consumer expectations from iOS/Android) require a <strong>frosted-glass depth effect</strong> — content below is recognizable but de-emphasized, signaling to the user that the overlay is a temporary layer above their context.</p>
+    <p>There are three implementation options:</p>
+    <table>
+      <thead><tr><th>Approach</th><th>Performance</th><th>Quality</th><th>Complexity</th></tr></thead>
+      <tbody>
+        <tr><td>CPU screenshot + blur bitmap (RenderScript / CPU)</td><td>❌ High CPU, ~100–300ms lag</td><td>Static, no live update</td><td>Medium</td></tr>
+        <tr><td>RenderEffect blur on a View</td><td>✅ GPU, but blurs own view not background</td><td>Only own content</td><td>Low</td></tr>
+        <tr><td><code>FLAG_BLUR_BEHIND</code> (SurfaceFlinger blur)</td><td>✅ GPU, live, 0 ms overhead</td><td>Live — updates as content below moves</td><td>Low</td></tr>
+      </tbody>
+    </table>
+    <p>The SurfaceFlinger approach is clearly superior for a live overlay — it blurs at the compositor level, meaning even videos playing behind the panel are blurred in real time.</p>
+  </section>
+
+  <section class="detail-section" id="system-property">
+    <h2>2. Enabling Blur: System Property</h2>
+    <p>Background blur via <code>FLAG_BLUR_BEHIND</code> is disabled by default in AOSP because it requires GPU hardware support and can impact power on low-end devices. It is enabled with a single system property in the device's <code>vendor/build.prop</code> or <code>product/build.prop</code>:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Properties</span>
+        <span class="code-file">device/gm/gvm/build.prop (or init.rc)</span>
+      </div>
+      <pre><code><span class="cm"># Enable SurfaceFlinger hardware background blur</span>
+<span class="kw">ro.surface_flinger.supports_background_blur</span>=<span class="nm">1</span></code></pre>
+    </div>
+
+    <p>Without this property set to <code>1</code>, SurfaceFlinger ignores <code>blurBehindRadius</code> on all windows. The Qualcomm SA8155 GPU used in the GM vehicle platform supports this feature natively.</p>
+
+    <div class="callout tip">
+      <i class="fas fa-lightbulb"></i>
+      <p>You can verify blur support at runtime: <code>BlurUtils.supportsBlursOnWindows(windowManager)</code> wraps an internal API check on this system property. QuickControlBar gates the blur feature on this check to gracefully degrade to a dim-only overlay on platforms without blur support.</p>
+    </div>
+  </section>
+
+  <section class="detail-section" id="window-flags">
+    <h2>3. Window Flags for Blur</h2>
+    <p>Two window parameters work together to produce the frosted-glass effect:</p>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>What it controls</th></tr></thead>
+      <tbody>
+        <tr><td><code>FLAG_BLUR_BEHIND</code></td><td>Enables Gaussian blur on all layers behind this window's surface in SurfaceFlinger</td></tr>
+        <tr><td><code>blurBehindRadius</code></td><td>Blur kernel radius in pixels. 0 = no blur. Animated from 0 to max on show.</td></tr>
+        <tr><td><code>FLAG_DIM_BEHIND</code></td><td>Adds a dark scrim behind the window (separate from blur)</td></tr>
+        <tr><td><code>dimAmount</code></td><td>Scrim opacity 0.0–1.0. Animated alongside blur for a combined frosted effect.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="detail-section" id="animation">
+    <h2>4. Animated Blur Radius</h2>
+    <p>Snapping the blur radius from 0 to max instantly would look jarring. The animation uses a <code>ValueAnimator</code> that interpolates both <code>blurBehindRadius</code> and <code>dimAmount</code> simultaneously, calling <code>WindowManager.updateViewLayout()</code> on each frame to push the change to SurfaceFlinger:</p>
+
+    <p>The dim is capped at <code>0.3f</code> (30% opacity). Combined effect (slight blur + slight dim) gives depth without losing context.</p>
+  </section>
+
+  <section class="detail-section" id="display-tuning">
+    <h2>5. Per-Display Blur Radius Tuning</h2>
+    <p>The blur radius is not the same across all displays because the <em>pixel density</em> differs. A radius of <code>50px</code> at 2560×1080 produces a very different perceptual blur than <code>50px</code> at 1920×1080.</p>
+
+    <div class="callout warn">
+      <i class="fas fa-exclamation-triangle"></i>
+      <p>The RSI displays use <code>1f</code> as their blur radius, meaning blur is effectively a no-op there and only the dim effect is active. This is a calibration decision: on the larger RSI panels under bright vehicle cabin lighting, a heavy blur was found to be less legible. The dim-only approach provides sufficient visual separation.</p>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>FPI 11.5" (2560×1080)</h4>
+        <p>blurBehindRadius = <strong>50px</strong><br>Animate-in: 333 ms<br>Animate-out: 167 ms</p>
+      </div>
+      <div class="card">
+        <h4>RSI 12.2" / 20"</h4>
+        <p>blurBehindRadius = <strong>1px</strong> (effectively 0)<br>Dim-only effect<br>Same animation timing</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section" id="why">
+    <h2>6. Why Not CPU-based Blur?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The primary reason for choosing <code>FLAG_BLUR_BEHIND</code> is <strong>zero CPU cost</strong>. CPU-based blur (blurring a screenshot bitmap with RenderScript or custom Gaussian convolution) would take 100–300ms per frame on the ARM cores, making real-time animation impossible and blocking the main thread. SurfaceFlinger's blur happens completely on the GPU's compositor path — it processes the raw surface buffers before they reach the display, adding negligible latency (~1ms). The effect also stays live: if a video is playing full-screen beneath the panel, the blur refreshes at 60 fps as the video frames change. <br><br>Enabling it required only a system property and two window flags — the lowest possible implementation cost for a high-quality effect.</p>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

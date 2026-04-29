@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Python Build & Sync Scripts | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Python Build &amp; Sync Scripts</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Developer Tooling</div>
+  <h1>Python Scripts for Build Server Sync,<br>Automated Build &amp; APK Installation</h1>
+  <p class="subtitle">How a custom Python CLI tool (build.py) automates the entire development loop — syncing local source changes to a remote AOSP build server via SSH/SFTP, triggering distributed builds, downloading artefacts, and pushing the APK directly to the device — in a single command.</p>
+  <div class="tags">
+    <span>Paramiko / pysftp</span><span>SSH</span><span>git diff --patch</span>
+    <span>bee-boost</span><span>OverlayFS push</span><span>JSON config</span><span>Python 3.11</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#architecture">Tool Architecture Overview</a></li>
+      <li><a href="#config">JSON-driven Configuration</a></li>
+      <li><a href="#sync">Source Sync: git patch approach</a></li>
+      <li><a href="#build">Remote Build: bee-boost</a></li>
+      <li><a href="#download">Download: SFTP + art.lge.com fallback</a></li>
+      <li><a href="#install">Install to Device</a></li>
+      <li><a href="#usage">Usage Examples</a></li>
+      <li><a href="#utils">OsUtil — Supporting Library</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 Problem -->
+  <section class="detail-section" id="problem">
+    <h2>1. The Problem</h2>
+    <p>The AOSP platform build for the GM vehicle project runs on a remote Linux build server. The full build pipeline before this tooling existed looked like this:</p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-content">
+          <strong>Edit source locally</strong>
+          <span>Changes to GvmSystemUI on Windows machine (E:\01.Source\)</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-content">
+          <strong>Manually copy to build server</strong>
+          <span>Open WinSCP / scp, navigate to the correct directory, drag files. ~3–5 min of manual work.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-content">
+          <strong>SSH in and trigger build</strong>
+          <span>Connect to server, cd to AOSP root, run build command. ~15–30 min wait.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-content">
+          <strong>Manually download APK</strong>
+          <span>Find the output APK in <code>out/target/product/fpi/...</code>, download via WinSCP.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">5</div>
+        <div class="flow-content">
+          <strong>Manually push to device</strong>
+          <span>adb push + adb shell killall + adb shell am start-service. Multiple commands.</span>
+        </div>
+      </div>
+    </div>
+
+    <p>Total: <strong>20–40 minutes per iteration</strong>, with 5–10 minutes of manual steps repeated every cycle. The Python tool reduces this to <strong>one command</strong>.</p>
+  </section>
+
+  <!-- 2 Architecture -->
+  <section class="detail-section" id="architecture">
+    <h2>2. Tool Architecture Overview</h2>
+
+    <table>
+      <thead><tr><th>Component</th><th>File</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><strong>CLI entry point</strong></td><td><code>build.py</code></td><td>Main script — parses flags, orchestrates all steps</td></tr>
+        <tr><td><strong>Utility library</strong></td><td><code>Utils/OsUtil.py</code></td><td>SSH exec, SFTP helpers, console colors, progress bars, Windows notifications</td></tr>
+        <tr><td><strong>App configs</strong></td><td><code>hmi.json</code>, <code>framework.json</code>, <code>talkback.json</code>, <code>vehicle.json</code>…</td><td>Per-module configuration: server paths, local paths, build commands, device install paths</td></tr>
+        <tr><td><strong>SSH config</strong></td><td><code>SSHConfig/ssh_config.json</code></td><td>Server credentials (host, port, username)</td></tr>
+        <tr><td><strong>HTTP server helper</strong></td><td><code>start_http_server.py</code></td><td>Starts a Python HTTP server on the build server's <code>~/swut_out</code> — for browsing test coverage reports</td></tr>
+        <tr><td><strong>Init script</strong></td><td><code>InitLibs/init.bat</code></td><td>One-time setup: installs Python dependencies (paramiko, pysftp, win10toast)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>CLI flags</h3>
+    <table>
+      <thead><tr><th>Flag</th><th>Short</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td><code>--push-code</code></td><td><code>-p</code></td><td>Sync local changes to build server via git patch</td></tr>
+        <tr><td><code>--build-boost</code></td><td><code>-b</code></td><td>Trigger a distributed boost build on the server and monitor it</td></tr>
+        <tr><td><code>--nb</code></td><td></td><td>Normal (single-machine) build</td></tr>
+        <tr><td><code>--download</code></td><td><code>-d</code></td><td>Download the built artefact from the server to local <code>output/</code></td></tr>
+        <tr><td><code>--install</code></td><td><code>-i</code></td><td>Push the downloaded APK to the device via adb</td></tr>
+        <tr><td><code>--use-art</code></td><td><code>--art</code></td><td>Route large file download through art.lge.com instead of direct SFTP</td></tr>
+        <tr><td><code>--remount</code></td><td></td><td>Run adb remount before install (convenience shortcut)</td></tr>
+        <tr><td><code>--offline</code></td><td></td><td>Skip server connection — operate on already-downloaded local files only</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 3 Config -->
+  <section class="detail-section" id="config">
+    <h2>3. JSON-driven Configuration</h2>
+    <p>Each buildable module has its own JSON config file. The script takes the config name as an argument. This makes it trivial to add a new module — just create a new JSON file with no code changes:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">JSON</span>
+        <span class="code-file">hmi.json — GvmSystemUI module config</span>
+      </div>
+      <pre><code>{
+    <span class="st">"server"</span>: {
+        <span class="st">"id"</span>: <span class="st">"vbee"</span>,
+        <span class="st">"host"</span>: <span class="st">"vang-truong-aa.vbee.lge.com"</span>,
+        <span class="st">"port"</span>: <span class="st">"45609"</span>,
+        <span class="st">"username"</span>: <span class="st">"worker"</span>
+    },
+    <span class="cm">// Where on the build server is the module's source tree</span>
+    <span class="st">"SERVER_SOURCE_PATH"</span>: <span class="st">"/home/worker/gvm/android_system/vendor/lge/packages/apps/oem/GvmSystemUI"</span>,
+    <span class="cm">// Local source on developer's Windows machine</span>
+    <span class="st">"LOCAL_SOURCE_PATH"</span>:  <span class="st">"E:/01.Source/My27/GvmSystemUI"</span>,
+    <span class="cm">// Where the built APK folder lands in the AOSP out/ directory</span>
+    <span class="st">"OUTPUT_FILE_PATH"</span>:  <span class="st">"/home/worker/gvm/android_system/out/target/product/fpi/system_ext/priv-app/"</span>,
+    <span class="st">"OUTPUT_FILE_NAME"</span>: <span class="st">"GvmSystemUI"</span>,
+    <span class="cm">// Where to push the APK on the vehicle device</span>
+    <span class="st">"DEVICE_FILE_PATH"</span>: <span class="st">"/system_ext/priv-app/"</span>,
+    <span class="cm">// bee-boost distributed build command</span>
+    <span class="st">"COMMAND_BUILD_BOOST"</span>: <span class="st">"bee-boost-start ~/bee_build/gvm-systemui.sh"</span>,
+    <span class="st">"COMMAND_BUILD_NORMAL"</span>: <span class="st">"..."</span>,
+    <span class="cm">// adb shell command to restart SystemUI after install</span>
+    <span class="st">"COMMAND_PUSH_AND_RESET"</span>: <span class="st">"install-gvm-systemui"</span>
+}</code></pre>
+    </div>
+
+    <p>Supported module configs in the project:</p>
+    <div class="card-grid">
+      <div class="card"><h4>hmi.json</h4><p>GvmSystemUI APK — the main SystemUI app</p></div>
+      <div class="card"><h4>framework.json</h4><p>services.jar — Android framework patch (sourceoverlay)</p></div>
+      <div class="card"><h4>talkback.json</h4><p>GvmTalkBack accessibility service</p></div>
+      <div class="card"><h4>vehicle.json</h4><p>GvmVehicleInformation HMI app</p></div>
+      <div class="card"><h4>post.json</h4><p>Post-CS migration SystemUI build on a separate server</p></div>
+      <div class="card"><h4>service.json</h4><p>RSI-targeted services.jar build variant</p></div>
+    </div>
+  </section>
+
+  <!-- 4 Sync -->
+  <section class="detail-section" id="sync">
+    <h2>4. Source Sync: git patch Approach</h2>
+    <p>The most elegant part of the tool is how it syncs local changes to the server. Instead of uploading entire files (slow, risks overwrites), it uses <strong>git diff to create a patch file</strong> and applies it on the server side:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-file">build.py — copy_source_to_server()</span>
+      </div>
+      <pre><code><span class="kw">def</span> <span class="fn">copy_source_to_server</span>():
+    <span class="cm"># 1. On Windows: stage all modified/new files, generate unified diff patch</span>
+    os.<span class="fn">system</span>(<span class="st">'cd /d "'</span> + LOCAL_SOURCE_PATH + <span class="st">'" && git add . && git diff HEAD > changes.patch'</span>)
+    changesPath = os.path.<span class="fn">join</span>(LOCAL_SOURCE_PATH, <span class="st">'changes.patch'</span>)
+
+    <span class="cm"># 2. On the server: reset to HEAD (clean state), then apply the patch</span>
+    util.<span class="fn">exec</span>(server_ssh,
+        <span class="st">f'cd {SERVER_SOURCE_PATH} && rm -rf changes.patch && git reset --hard && git clean -df'</span>)
+
+    <span class="cm"># 3. Send only the patch file (tiny — kilobytes) via SFTP</span>
+    <span class="kw">with</span> server_ftp.<span class="fn">cd</span>(SERVER_SOURCE_PATH):
+        server_ftp.<span class="fn">put</span>(changesPath, callback=progress_cb)
+
+    <span class="cm"># 4. Apply patch on server → source tree matches local edits exactly</span>
+    util.<span class="fn">exec</span>(server_ssh, <span class="st">f'cd {SERVER_SOURCE_PATH} && git apply changes.patch'</span>)
+    util.<span class="fn">exec</span>(server_ssh, <span class="st">f'cd {SERVER_SOURCE_PATH} && rm -rf changes.patch'</span>)
+    util.<span class="fn">exec</span>(server_ssh, <span class="st">f'cd {SERVER_SOURCE_PATH} && git status'</span>)
+
+    <span class="cm"># 5. Clean up local patch file, unstage local git index</span>
+    util.<span class="fn">remove_entry</span>(changesPath)
+    os.<span class="fn">system</span>(<span class="st">'cd /d "'</span> + LOCAL_SOURCE_PATH + <span class="st">'" && git reset'</span>)</code></pre>
+    </div>
+
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Why git patch?</div>
+      <p>A typical code change modifies 3–10 files out of thousands. Uploading a patch file is <strong>~10 KB instead of ~500 MB</strong> of full source. Git's patch format is diff-precise — no partial copies, no wrong-file-version issues. The server's <code>git apply</code> verifies the patch applies cleanly or reports a conflict clearly. <code>git reset --hard</code> before applying ensures the server is always in a reproducible state.</p>
+    </div>
+  </section>
+
+  <!-- 5 Build -->
+  <section class="detail-section" id="build">
+    <h2>5. Remote Build: bee-boost Distributed System</h2>
+    <p>The LGE build infrastructure uses <strong>bee-boost</strong> — a distributed build farm that parallelizes AOSP compilation across multiple worker nodes. The script triggers it via SSH and monitors the build log:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-file">build.py — build monitoring loop</span>
+      </div>
+      <pre><code><span class="kw">if</span> IS_BUILD_BOOST == <span class="st">'YES'</span>:
+    <span class="cm"># Trigger: e.g. "bee-boost-start ~/bee_build/gvm-systemui.sh"</span>
+    util.<span class="fn">exec</span>(server_ssh, COMMAND_BUILD_BOOST)
+    time.<span class="fn">sleep</span>(<span class="nm">30</span>)     <span class="cm"># wait for build to initialize</span>
+
+    is_during_build = <span class="kw">True</span>
+    <span class="kw">while</span>(is_during_build):
+        time.<span class="fn">sleep</span>(<span class="nm">10</span>)
+        <span class="fn">connect_to_server</span>()   <span class="cm"># reconnect if build server rebooted during build</span>
+        result = <span class="fn">build_result</span>()
+
+        <span class="kw">if</span> result == -<span class="nm">1</span>:       <span class="cm"># "failed to build some targets" in log</span>
+            util.<span class="fn">error</span>(<span class="st">"Build failed! check output/bee_build.log"</span>)
+            util.<span class="fn">showWindowNotification</span>(<span class="st">"Error"</span>, <span class="st">"Build Failed!!"</span>)
+            sys.<span class="fn">exit</span>()
+        <span class="kw">elif</span> result &gt;= <span class="nm">1</span>:    <span class="cm"># "build completed successfully" found</span>
+            util.<span class="fn">info</span>(<span class="st">"Build success"</span>)
+            is_during_build = <span class="kw">False</span>
+        <span class="kw">else</span>:                  <span class="cm"># still running — stream tail of log</span>
+            util.<span class="fn">exec</span>(server_ssh, <span class="st">'tail -f -n100 ~/bee_build/bee_build.log'</span>)
+
+<span class="kw">def</span> <span class="fn">build_result</span>():
+    <span class="cm"># Download bee_build.log and parse for success/fail markers</span>
+    util.<span class="fn">make_dir</span>(<span class="st">'output'</span>)
+    os.<span class="fn">chdir</span>(<span class="st">'output'</span>)
+    <span class="fn">download_from_server</span>(<span class="st">"/home/worker/bee_build/"</span>, <span class="st">"bee_build.log"</span>)
+
+    <span class="kw">if</span> util.<span class="fn">FindStringInFilePath</span>(<span class="st">"failed to build some targets"</span>, <span class="st">"bee_build.log"</span>) &gt;= <span class="nm">1</span>:
+        os.<span class="fn">chdir</span>(<span class="st">".."</span>); <span class="kw">return</span> -<span class="nm">1</span>
+    <span class="kw">if</span> util.<span class="fn">FindStringInFilePath</span>(<span class="st">"build completed successfull"</span>, <span class="st">"bee_build.log"</span>) &gt;= <span class="nm">1</span>:
+        os.<span class="fn">chdir</span>(<span class="st">".."</span>); <span class="kw">return</span> <span class="nm">1</span>
+    os.<span class="fn">chdir</span>(<span class="st">".."</span>); <span class="kw">return</span> <span class="nm">0</span>   <span class="cm"># still building</span></code></pre>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>The monitoring loop handles server reboots: the build server may restart mid-build for OS maintenance. The script calls <code>connect_to_server()</code> in every iteration with a 30-retry loop so it can reconnect transparently and continue monitoring without the developer having to restart anything.</p>
+    </div>
+  </section>
+
+  <!-- 6 Download -->
+  <section class="detail-section" id="download">
+    <h2>6. Download: SFTP Direct + art.lge.com Fallback</h2>
+    <p>The built artefact (e.g., the <code>GvmSystemUI/</code> folder from AOSP <code>out/</code>) is downloaded with two strategies depending on file size:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-file">build.py — download_from_server()</span>
+      </div>
+      <pre><code><span class="kw">def</span> <span class="fn">download_from_server</span>(path, file_name, use_art_server=<span class="kw">False</span>):
+    <span class="cm"># Always zip first on server (saves bandwidth, handles folders)</span>
+    util.<span class="fn">exec</span>(server_ssh, <span class="st">f'cd {path} && rm -f compressed.zip && zip -r compressed.zip {file_name}'</span>)
+
+    <span class="kw">if not</span> use_art_server:
+        <span class="cm"># Default: direct SFTP download from build server</span>
+        util.<span class="fn">info</span>(<span class="st">'Downloading via SFTP...'</span>)
+        <span class="kw">with</span> server_ftp.<span class="fn">cd</span>(path):
+            server_ftp.<span class="fn">get</span>(<span class="st">'compressed.zip'</span>, callback=progress_cb)
+    <span class="kw">else</span>:
+        <span class="cm"># Large files: server uploads to art.lge.com artifact server first,</span>
+        <span class="cm"># then Windows client downloads from there (faster CDN, avoids SSH throughput limit)</span>
+        util.<span class="fn">exec</span>(server_ssh,
+            <span class="st">f'cd {path} && curl -u user:pass -T compressed.zip "http://art.lge.com/vc/aivi2_ccc/GVM/compressed.zip"'</span>)
+        <span class="cm"># Stream download from art.lge.com with progress bar</span>
+        response = requests.<span class="fn">get</span>(url, auth=auth, stream=<span class="kw">True</span>)
+        <span class="kw">with</span> <span class="fn">open</span>(<span class="st">'compressed.zip'</span>, <span class="st">'wb'</span>) <span class="kw">as</span> f:
+            <span class="kw">for</span> chunk <span class="kw">in</span> response.<span class="fn">iter_content</span>(chunk_size=<span class="nm">8192</span>):
+                f.<span class="fn">write</span>(chunk)
+
+    <span class="cm"># Unzip locally, clean up the zip</span>
+    util.<span class="fn">unzip</span>(<span class="st">'compressed.zip'</span>)
+    util.<span class="fn">remove_entry</span>(<span class="st">'compressed.zip'</span>)
+    util.<span class="fn">exec</span>(server_ssh, <span class="st">f'cd {path} && rm compressed.zip'</span>)</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Strategy</th><th>When used</th><th>Speed</th></tr></thead>
+      <tbody>
+        <tr><td>Direct SFTP (<code>pysftp</code>)</td><td>Default — APK or jar (~5–20 MB)</td><td>~2–5 MB/s through SSH tunnel</td></tr>
+        <tr><td>art.lge.com (<code>--art</code> flag)</td><td>Large artefacts (framework.jar ~200 MB, or full system image)</td><td>~20–50 MB/s from LGE CDN</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- 7 Install -->
+  <section class="detail-section" id="install">
+    <h2>7. Install to Device</h2>
+    <p>The <code>-i</code> flag runs the install step: remount the device's OverlayFS, push the APK, then execute the module's reset command:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-file">build.py — install step</span>
+      </div>
+      <pre><code><span class="kw">if</span> IS_INSTALL_TO_BOARD == <span class="st">'YES'</span>:
+    os.<span class="fn">chdir</span>(<span class="st">'output'</span>)
+    util.<span class="fn">adbRemount</span>()                                     <span class="cm"># adb shell mount -o rw,remount /system_ext</span>
+    util.<span class="fn">pushFileToBoard</span>(OUTPUT_FILE_NAME, DEVICE_FILE_PATH)  <span class="cm"># adb push GvmSystemUI/ /system_ext/priv-app/</span>
+    os.<span class="fn">system</span>(COMMAND_PUSH_AND_RESET)                    <span class="cm"># e.g. "install-gvm-systemui" bat alias</span>
+    os.<span class="fn">chdir</span>(<span class="st">".."</span>)</code></pre>
+    </div>
+
+    <p><code>COMMAND_PUSH_AND_RESET</code> from the JSON config maps to a bat alias that kills and restarts the SystemUI process:</p>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">install-gvm-systemui.bat (called by COMMAND_PUSH_AND_RESET)</span>
+      </div>
+      <pre><code>adb wait-for-device
+adb shell <span class="st">"killall com.android.systemui"</span>
+adb shell <span class="st">"am start-service com.android.systemui/.SystemUIService"</span>
+adb shell <span class="st">"am start-service com.android.systemui/.SystemUIService --display 1"</span></code></pre>
+    </div>
+  </section>
+
+  <!-- 8 Usage -->
+  <section class="detail-section" id="usage">
+    <h2>8. Usage Examples</h2>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Shell</span>
+        <span class="code-file">Common commands</span>
+      </div>
+      <pre><code><span class="cm"># Full cycle: push code → boost build → download APK → install to device</span>
+py build.py -p -b -d -i hmi
+
+<span class="cm"># Just sync local changes to server (no build)</span>
+py build.py -p hmi
+
+<span class="cm"># Download already-built APK and install (skip build)</span>
+py build.py -d -i hmi
+
+<span class="cm"># Build framework (services.jar) with large-file download via art.lge.com</span>
+py build.py -p -b -d --art framework
+
+<span class="cm"># Offline install: use already-downloaded local output/ folder</span>
+py build.py --offline -i hmi
+
+<span class="cm"># Build TalkBack service</span>
+py build.py -p -b -d -i talkback
+
+<span class="cm"># Start HTTP server on build server to browse unit test coverage reports</span>
+py test_start.py</span></code></pre>
+    </div>
+
+    <div class="callout tip">
+      <i class="fas fa-lightbulb"></i>
+      <p>The script uses <code>win10toast</code> to send a Windows desktop notification when the build finishes — so the developer can leave the terminal and get pinged when the 15–30 min build completes. The notification reads: <strong>"Gút Chóp! 22 Phụt"</strong> (Vietnamese: "Job done! 22 minutes").</p>
+    </div>
+
+    <h3>Init dependencies (first-time setup)</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">InitLibs/init.bat</span>
+      </div>
+      <pre><code>py -m ensurepip --upgrade
+py get-pip.py
+py -m pip install --upgrade pip
+py -m pip install paramiko     <span class="cm">REM SSH client library</span>
+py -m pip install win10toast   <span class="cm">REM Windows desktop notifications</span>
+py -m pip install pysftp       <span class="cm">REM SFTP client (wraps paramiko)</span></code></pre>
+    </div>
+  </section>
+
+  <!-- 9 OsUtil -->
+  <section class="detail-section" id="utils">
+    <h2>9. OsUtil — Supporting Library</h2>
+    <p><code>Utils/OsUtil.py</code> provides all the common operations consumed by <code>build.py</code>:</p>
+
+    <table>
+      <thead><tr><th>Function</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>exec(ssh, cmd)</code></td><td>Execute a shell command on the remote server via Paramiko, stream output to local console in real time</td></tr>
+        <tr><td><code>adbRemount()</code></td><td>Run <code>adb shell mount -o rw,remount /system_ext</code> (and /system) locally</td></tr>
+        <tr><td><code>pushFileToBoard(name, path)</code></td><td>Run <code>adb push &lt;output_name&gt; &lt;device_path&gt;</code> with progress tracking</td></tr>
+        <tr><td><code>printProgressBar(transferred, total, ...)</code></td><td>SFTP transfer progress bar in the console</td></tr>
+        <tr><td><code>FindStringInFilePath(string, file)</code></td><td>Search a file for a string, return match count — used for build log parsing</td></tr>
+        <tr><td><code>unzip(file)</code></td><td>Extract downloaded <code>compressed.zip</code></td></tr>
+        <tr><td><code>showWindowNotification(title, msg)</code></td><td>Windows 10 toast notification via <code>win10toast</code></td></tr>
+        <tr><td><code>info() / warn() / error()</code></td><td>Colored console output (green / yellow / red) with ANSI codes</td></tr>
+        <tr><td><code>get_config_param(json, key)</code></td><td>Safe JSON key read with mandatory/optional and default value support</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Python</span>
+        <span class="code-file">Utils/OsUtil.py — colored console output</span>
+      </div>
+      <pre><code><span class="kw">class</span> <span class="tp">Colors</span>:
+    OKGREEN  = <span class="st">'\033[92m'</span>
+    WARNING  = <span class="st">'\033[93m'</span>
+    FAIL     = <span class="st">'\033[91m'</span>
+    ENDC     = <span class="st">'\033[0m'</span>
+
+<span class="kw">def</span> <span class="fn">info</span>(msg):
+    <span class="fn">print</span>(Colors.OKGREEN + <span class="st">f'INFO:  {msg}'</span> + Colors.ENDC)
+
+<span class="kw">def</span> <span class="fn">error</span>(msg):
+    <span class="fn">print</span>(Colors.FAIL + <span class="st">f'ERROR: {msg}'</span> + Colors.ENDC)</code></pre>
+    </div>
+  </section>
+
+  <!-- 10 Why -->
+  <section class="detail-section" id="why">
+    <h2>10. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The tool was built to solve a concrete productivity problem: the AOSP build environment cannot run on a Windows laptop, but source editing and IDE tooling (Android Studio) works best on Windows. The build server is a powerful Linux machine but requires manual SSH commands and file transfers. The Python CLI <strong>bridges these two worlds with a single command</strong>. <br><br>
+      <strong>Why Python?</strong> Python has Paramiko (the de-facto SSH library for automation scripts) and pysftp, making server interaction trivial to code. Python 3.11 runs natively on Windows without additional runtime. Compared to PowerShell or bash-over-SSH, Python provides a clean abstraction for error handling, retry logic, and cross-platform file operations. <br><br>
+      <strong>Why git patch instead of rsync?</strong> The local repo and server repo may be on different git commits (server may be ahead after other engineers' merges). rsync would blindly overwrite files and break the server's git history. The patch approach is git-aware: it applies <em>only the developer's diff</em>, leaving the server's other changes untouched. This also makes the change set visible (<code>git status</code> on the server shows exactly what was applied).</p>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <h4>One command</h4>
+        <p><code>py build.py -p -b -d -i hmi</code> replaces 20 minutes of manual steps.</p>
+      </div>
+      <div class="card">
+        <h4>Multi-module</h4>
+        <p>Works for SystemUI, framework, TalkBack, vehicle app — any module with a JSON config.</p>
+      </div>
+      <div class="card">
+        <h4>Resilient</h4>
+        <p>Auto-reconnects to build server if it reboots during the build. Monitors log until failure or success.</p>
+      </div>
+      <div class="card">
+        <h4>Desktop notification</h4>
+        <p>Windows toast notification on build complete — developer doesn't need to watch the terminal.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QuickControl Floating Panel | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>QuickControl Floating Panel</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">WindowManager / System Overlay</div>
+  <h1>QuickControl Floating Panel<br>via WindowManager</h1>
+  <p class="subtitle">A full-screen system overlay providing quick access to: <strong>display brightness</strong>, <strong>Bluetooth audio volume</strong> (up to 2 devices), <strong>screen share</strong> (RSI only), <strong>Quick Remote</strong>, <strong>articulation</strong>, and <strong>power off</strong> — rendered above all app content with animated blur, dim, and card transitions.</p>
+  <div class="tags">
+    <span>WindowManager</span><span>TYPE_STATUS_BAR_SUB_PANEL</span><span>FLAG_BLUR_BEHIND</span>
+    <span>Dagger 2</span><span>ValueAnimator</span><span>Kotlin</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#architecture">Architecture Overview</a></li>
+      <li><a href="#window-params">WindowManager Layout Parameters</a></li>
+      <li><a href="#lifecycle">Show / Hide Lifecycle</a></li>
+      <li><a href="#animation">Blur &amp; Scrim Animations</a></li>
+      <li><a href="#dagger">Dagger 2 Integration</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <section class="detail-section" id="problem">
+    <h2>1. The Problem</h2>
+    <p>The GM vehicle system requires a panel that can appear on top of <em>any</em> running application — navigation, media, phone — when the user presses a hardware or soft button. This is similar to a system-level bottom sheet. It must:</p>
+    <ul>
+      <li>Render above third-party apps without requiring them to participate</li>
+      <li>Blur and dim the content behind it to maintain focus</li>
+      <li>Be dismissible by tapping outside the panel (FLAG_WATCH_OUTSIDE_TOUCH)</li>
+      <li>Appear as part of SystemUI — same process, same UID, system privileges</li>
+    </ul>
+    <p>A standard Android <code>Dialog</code> or <code>Fragment</code> cannot achieve this because it is tied to an Activity's window. The solution is to use <strong>WindowManager to add a View</strong> directly to the window hierarchy as a system overlay.</p>
+  </section>
+
+  <section class="detail-section" id="architecture">
+    <h2>2. Architecture Overview</h2>
+
+    <table>
+      <thead><tr><th>Class</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>QuickControlBar.kt</code></td><td>Core manager — owns the WindowManager token, orchestrates show/hide and all sub-controllers</td></tr>
+        <tr><td><code>QuickControlBarAnimator.kt</code></td><td>Drives scrim fade, card slide-in/out, and background blur animations</td></tr>
+        <tr><td><code>QuickControlBarHelper.kt</code></td><td>Tracks auto-hide callbacks and the global "is showing" state flag</td></tr>
+        <tr><td><code>QuickControlBarBrightness.kt</code></td><td>Brightness SeekBar + ± buttons; reads/writes via <code>BrightnessManager</code>; monitors vehicle night-mode via VHAL (<code>GmVehicleProperty</code>)</td></tr>
+        <tr><td><code>QuickControlBarAudio.kt</code></td><td>Volume for up to 2 BT headphones (independent SeekBars) + speaker/headphone output selection; integrates <code>VolumeHelper</code> + <code>AudioManager</code></td></tr>
+        <tr><td><code>QuickControlBarPower.kt</code></td><td>Power-off button → <code>LAlertDialog</code> confirmation → <code>PowerManager.shutdown()</code></td></tr>
+        <tr><td><code>QuickControlBarScreenShare.kt</code></td><td>Screen-share between RSI1 and RSI2 via <code>ScreenShareHelper</code>; disabled on FPI (<code>isFPI()</code> guard)</td></tr>
+        <tr><td><code>QuickControlBarQuickRemote.kt</code></td><td>Quick Remote button → <code>ACTION_SHOW_QR_CODE</code> intent to <code>com.gm.remote</code> for pairing QR code</td></tr>
+        <tr><td><code>QuickControlBarArticulation.kt</code></td><td>Articulation button → <code>ARTICULATION_BUTTON_PRESS</code> broadcast to <code>com.lge.car.powerlight</code> to fold/adjust the panel</td></tr>
+        <tr><td><code>QuickControlBarComponent.java</code></td><td>Dagger subcomponent scoped to the panel</td></tr>
+        <tr><td><code>QuickControlBarModule.java</code></td><td>Dagger module providing the View and Context with @DisplayId qualifier</td></tr>
+        <tr><td><code>quick_control.xml</code> (×3 + default)</td><td>Layout files for w1440dp (RSI), w1920dp (FPI 11.5"), w2820dp (FPI 20"); default = dev/test only</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="detail-section" id="window-params">
+    <h2>3. WindowManager Layout Parameters</h2>
+    <p>Every decision in <code>createWindowLayoutParams()</code> is intentional:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">QuickControlBar.kt — createWindowLayoutParams() · key params</span>
+      </div>
+      <pre><code><span class="cm">// Window type — sits above apps, below keyguard</span>
+<span class="nm">TYPE_STATUS_BAR_SUB_PANEL</span>
+
+<span class="cm">// Flags</span>
+<span class="nm"></span> <span class="kw"></span> <span class="nm">FLAG_WATCH_OUTSIDE_TOUCH</span>   <span class="cm">// dismiss on outside tap</span>
+<span class="nm">FLAG_BLUR_BEHIND</span> <span class="kw">or</span> <span class="nm">FLAG_DIM_BEHIND</span>              <span class="cm">// hardware blur + dim</span>
+
+<span class="cm">// Private flags</span>
+<span class="nm">PRIVATE_FLAG_TRUSTED_OVERLAY</span>   <span class="cm">// touch-through on transparent regions</span>
+<span class="nm">SYSTEM_FLAG_SHOW_FOR_ALL_USERS</span> <span class="cm">// multi-user automotive context</span>
+
+<span class="cm">// Insets / cutout</span>
+params.<span class="fn">setFitInsetsTypes</span>(<span class="nm">0</span>)   <span class="cm">// fill all 4 edges</span>
+params.token = <span class="fn">Binder</span>()          <span class="cm">// Activity-independent window token</span></code></pre>
+    </div>
+
+    <h3>Key flag decisions</h3>
+    <table>
+      <thead><tr><th>Flag / Property</th><th>Why it is set</th></tr></thead>
+      <tbody>
+        <tr><td><code>TYPE_STATUS_BAR_SUB_PANEL</code></td><td>Sits in the Z-order directly above app windows and below the status bar itself. Requires SYSTEM_ALERT_WINDOW or system uid.</td></tr>
+        <tr><td><code>FLAG_WATCH_OUTSIDE_TOUCH</code></td><td>Receives a single <code>ACTION_OUTSIDE</code> event when the user taps anywhere outside the panel view, allowing auto-dismiss.</td></tr>
+        <tr><td><code>PRIVATE_FLAG_TRUSTED_OVERLAY</code></td><td>Touch events that land on fully-transparent regions of the overlay are forwarded to the window below — preventing invisible tap-jacking.</td></tr>
+        <tr><td><code>setFitInsetsTypes(0)</code></td><td>The overlay fills all 4 edges including the space reserved by the navigation bar and status bar.</td></tr>
+        <tr><td><code>token = Binder()</code></td><td>An Activity-independent Binder token. Without an Activity token, the window survives Activity lifecycle events.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="detail-section" id="lifecycle">
+    <h2>4. Show / Hide Lifecycle</h2>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-content">
+          <strong>show() called</strong>
+          <span><code>mWindowManager.addView(mQuickControlBarView, params)</code> — injects the view into the WMS hierarchy.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-content">
+          <strong>Animate in</strong>
+          <span>QuickControlBarAnimator runs scrim fade-in (0→0.3 alpha) + card slide-up + blur radius 0→max over 333 ms.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-content">
+          <strong>User interacts</strong>
+          <span>Panel controls (brightness, volume, HVAC tiles) are live. TransientBarController suppresses nav-bar auto-hide while panel is open.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-content">
+          <strong>Dismiss triggered</strong>
+          <span>User taps outside (ACTION_OUTSIDE) or presses back → <code>hide()</code> called.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">5</div>
+        <div class="flow-content">
+          <strong>Animate out</strong>
+          <span>Reverse animation (blur → 0, dim → 0, card slide-down) over 167 ms.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">6</div>
+        <div class="flow-content">
+          <strong>removeViewFromWindow()</strong>
+          <span><code>mWindowManager.removeView(mQuickControlBarView)</code> — view fully detached, no memory held by WMS.</span>
+        </div>
+      </div>
+    </div>
+
+
+  </section>
+
+  <section class="detail-section" id="animation">
+    <h2>5. Blur &amp; Scrim Animations</h2> 
+    <p>Hardware blur (<code>FLAG_BLUR_BEHIND</code>) blurs all window content rendered below the overlay. This is a SurfaceFlinger-level feature enabled by <code>ro.surface_flinger.supports_background_blur=1</code> on the device. The blur radius is animated using a <code>ValueAnimator</code>:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">QuickControlBarAnimator.kt · key highlights</span>
+      </div>
+      <pre><code><span class="cm">// Blur radius per display type</span>
+mMaxBlurRadius = <span class="kw">if</span> (GvmUtils.<span class="fn">isFPI11_5Inch</span>()) <span class="nm">50f</span> <span class="kw">else</span> <span class="nm">1f</span>
+
+<span class="cm">// Animation durations</span>
+ANIMATION_DURATION_IN  = <span class="nm">333L</span>
+ANIMATION_DURATION_OUT = <span class="nm">167L</span>
+
+<span class="cm">// Blur + dim driven by the same ValueAnimator tick</span>
+ValueAnimator.<span class="fn">ofFloat</span>(startBlur, endBlur).<span class="fn">apply</span> {
+    layoutParams.blurBehindRadius = animatedValue
+    layoutParams.dimAmount        = (animatedValue / maxBlurRadius) * <span class="nm">0.3f</span>
+    windowManager.<span class="fn">updateViewLayout</span>(view, layoutParams)
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="dagger">
+    <h2>6. Dagger 2 Integration</h2>
+    <p>The panel is injected as a <strong>per-display subcomponent</strong>, allowing one QuickControlBar instance per physical display in a multi-display automotive system. The <code>@DisplayId</code> custom scope qualifier differentiates the WindowManager instance and the inflation context so each panel attaches to the correct display.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Java</span>
+        <span class="code-file">QuickControlBarModule.java · key annotations</span>
+      </div>
+      <pre><code><span class="cm">// Subcomponent scoped per physical display</span>
+<span class="an">@Module</span>  →  <span class="an">@QuickControlBarScope</span>
+
+<span class="cm">// @DisplayId qualifier differentiates WindowManager + Context per display</span>
+<span class="an">@Provides</span> <span class="an">@QuickControlView</span>
+View <span class="fn">providesQuickControlView</span>(<span class="an">@DisplayId</span> Context context)</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="why">
+    <h2>7. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>WindowManager overlay is the <strong>only viable mechanism</strong> for a system panel that must appear above all third-party apps without their cooperation. Activities cannot host such a panel (they are app-scoped)<code>. The TYPE_STATUS_BAR_SUB_PANEL</code> type is the exact window type designed for SystemUI overlays — it is the same type used by AOSP's own Quick Settings panel, Volume dialog, and Notification shade. Reusing this pattern ensures correct Z-ordering, touch event routing, and inset handling without needing to patch Window Policy.</p>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <h4>No Activity required</h4>
+        <p>The panel lives entirely in the SystemUI process — no Intent launches, no back-stack, instant show/hide.</p>
+      </div>
+      <div class="card">
+        <h4>Hardware-accelerated blur</h4>
+        <p><code>FLAG_BLUR_BEHIND</code> delegates blur to SurfaceFlinger — zero CPU cost, no screenshot/bitmap manipulation.</p>
+      </div>
+      <div class="card">
+        <h4>Z-order guaranteed</h4>
+        <p><code>TYPE_STATUS_BAR_SUB_PANEL</code> always stacks above app windows and below the lock screen.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

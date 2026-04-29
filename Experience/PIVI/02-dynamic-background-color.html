@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dynamic Background Color | Online Media – PIVI Land Rover</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">Online Media – PIVI Land Rover / <span>Dynamic Background Color</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">UX Enhancement</div>
+  <h1>Dynamic Background Colors<br>Extracted from Album Artwork</h1>
+  <p class="subtitle">
+    How the Spotify player background smoothly transitions to a vibrant color sampled from the
+    current album art — using a pixel-scanning heuristic in C++, a Qt signal chain, and an animated
+    QML gradient that updates every time the track changes.
+  </p>
+  <div class="tags">
+    <span>Qt / QNX</span><span>QImage Pixel Sampling</span><span>QML ColorAnimation</span>
+    <span>C++ → QML Signal Bridge</span><span>Vibrant Color Heuristic</span><span>UX Design</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#context">The Feature — What It Looks Like</a></li>
+      <li><a href="#challenge">The Challenge: No Palette Library on QNX</a></li>
+      <li><a href="#algorithm">The Vibrant Color Algorithm</a></li>
+      <li><a href="#pipeline">Full Signal Pipeline: Image → Color → QML</a></li>
+      <li><a href="#save-trigger">Step 1 — QML Saves Artwork, Triggers C++</a></li>
+      <li><a href="#cpp-extract">Step 2 — C++ Scans Pixels, Emits Color</a></li>
+      <li><a href="#signal-chain">Step 3 — Signal Chain Through Adapter</a></li>
+      <li><a href="#qml-animate">Step 4 — QML Animates the Gradient</a></li>
+      <li><a href="#why">Why These Design Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section class="detail-section" id="context">
+    <h2>1. The Feature — What It Looks Like</h2>
+    <p>
+      On the Spotify now-playing screen, the background is not a flat dark colour. Instead, it
+      displays a <strong>soft gradient that mirrors the dominant hue of the current track's album art</strong>:
+    </p>
+    <ul style="margin:1rem 0 1rem 2rem; line-height:2.2;">
+      <li>A warm red album (e.g. Taylor Swift) → the background glows with a muted crimson gradient.</li>
+      <li>A cool blue album (e.g. Coldplay) → the background shifts to a calm teal/navy tone.</li>
+      <li>When the user skips a track, the background <strong>smoothly animates</strong> (400 ms
+        <code>ColorAnimation</code>) from the old colour to the new one.</li>
+      <li>In dark mode the fallback colour is <code>#21252E</code>; in light mode it is
+        <code>#D2D2D2</code> — both neutral defaults used before the first artwork is loaded.</li>
+    </ul>
+    <p>
+      The effect is the same UX pattern popularised by Spotify's desktop and mobile apps, adapted
+      for an embedded QNX/Qt automotive HMI with no access to the Android Palette API.
+    </p>
+  </section>
+
+  <!-- 2 -->
+  <section class="detail-section" id="challenge">
+    <h2>2. The Challenge: No Palette Library on QNX</h2>
+    <p>
+      Android's <code>androidx.palette</code> library and iOS's <code>UIColor+DominantColor</code>
+      are not available on our QNX + Qt stack. The only tooling available was:
+    </p>
+    <div class="card-grid" style="margin-top:1rem;">
+      <div class="card">
+        <h4><i class="fas fa-check" style="color:var(--accent)"></i> Available</h4>
+        <p><code>QImage::pixelColor(x, y)</code> — pixel-level read of any in-memory image.<br>
+        <code>QColor::lightness()</code> and <code>QColor::saturation()</code> — HSL components.<br>
+        <code>QML ColorAnimation</code> — animated property transitions.<br>
+        <code>QML Image::grabToImage()</code> — render QML image to a <code>QImage</code>.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-times" style="color:#ff6b6b"></i> Not Available</h4>
+        <p>Android Palette API. iOS UIKit color extraction. Python/ML color clustering.
+        Any third-party native library (build system restrictions). GPU compute shaders for this use case.</p>
+      </div>
+    </div>
+    <p style="margin-top:1.5rem;">
+      The solution was a <strong>custom pixel-scan heuristic</strong> written in C++ that finds the
+      pixel whose HSL values are closest to a target "vibrant" profile — which matches the perceptual
+      quality of the Spotify-style dynamic background without k-means clustering or any ML.
+    </p>
+  </section>
+
+  <!-- 3 -->
+  <section class="detail-section" id="algorithm">
+    <h2>3. The Vibrant Color Algorithm</h2>
+    <p>
+      The algorithm answers: <em>"Which pixel in this image is the most vibrant?"</em>
+      by defining vibrant as the closest to a target lightness and saturation in HSL colour space.
+    </p>
+
+    <pre><code>// HmiOnlineMediaInterface.cpp — tuneable constants
+#define OFFSET              20    // Tolerance band (unused in final version)
+#define JUMP_RANGE          1     // Scan every pixel (1 = full resolution)
+#define TARGET_LIGHTNESS   155    // Vibrant: medium-light (0–255 scale)
+#define TARGET_SATURATION  129    // Vibrant: moderately saturated (0–255 scale)</code></pre>
+
+    <pre><code>void HmiOnlineMediaInterface::requestProcessVibrantColor()
+{
+    QString local_path = "/var/onlinemedia/hmi/albumArt.png";
+    QImage img(local_path);
+
+    if (img.width() != 0) {
+        int    max_diff = 510;   // worst possible diff = |255-0| + |255-0| = 510
+        QColor result;
+
+        for (int w = 0; w < img.width(); w += JUMP_RANGE) {
+            for (int h = 0; h < img.height(); h += JUMP_RANGE) {
+                QColor cl = img.pixelColor(w, h);
+
+                // "distance" from the ideal vibrant colour in HSL space
+                int diffValue = abs(cl.lightness()   - TARGET_LIGHTNESS)
+                              + abs(cl.saturation()  - TARGET_SATURATION);
+
+                if (diffValue <= max_diff) {
+                    result   = cl;
+                    max_diff = diffValue;   // progressively tighten the winner
+                }
+            }
+        }
+        emit sigUpdateVibrantColor(result.name());   // emit hex string e.g. "#a8312e"
+    }
+}</code></pre>
+
+    <p style="margin-top:1.5rem;"><strong>How it works visually:</strong></p>
+    <div class="card-grid">
+      <div class="card">
+        <h4>Step 1 — HSL Distance</h4>
+        <p>
+          For every pixel, compute <code>|lightness − 155| + |saturation − 129|</code>.
+          This is an L1 (Manhattan) distance in a 2D HSL subspace. Low distance = colour
+          close to the target vibrant profile.
+        </p>
+      </div>
+      <div class="card">
+        <h4>Step 2 — Progressive Winner</h4>
+        <p>
+          <code>max_diff</code> starts at 510 (maximum possible) and is updated each time a
+          closer pixel is found. After scanning all pixels, <code>result</code> is the global
+          nearest-vibrant pixel — an O(W × H) linear scan.
+        </p>
+      </div>
+      <div class="card">
+        <h4>Step 3 — Why HSL Not RGB?</h4>
+        <p>
+          HSL separates <em>colour identity</em> (hue) from <em>brightness</em> (lightness) and
+          <em>purity</em> (saturation). An RGB distance would treat dark-red and bright-red as
+          completely different. HSL lets us independently target "medium brightness, medium saturation"
+          — the sweet spot for readable background gradients.
+        </p>
+      </div>
+      <div class="card">
+        <h4>Step 4 — Fixed Targets (155, 129)</h4>
+        <p>
+          These values were tuned empirically by running the algorithm against 50+ album artworks
+          and evaluating visual harmony on the head unit display. They select colours that are
+          neither too dark (invisible on dark UI) nor too bright (overwhelming on the screen).
+        </p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      The input image is scaled to 100×100 pixels before the scan
+      (see <a href="#save-trigger">Step 1</a>), making the worst-case loop
+      100 × 100 = 10,000 iterations — completing in &lt; 1 ms on the head unit CPU.
+    </p>
+  </section>
+
+  <!-- 4 -->
+  <section class="detail-section" id="pipeline">
+    <h2>4. Full Signal Pipeline: Image → Color → QML</h2>
+    <pre><code>QML: Image.onStatusChanged (artwork loaded)
+    └── grabToImage(100×100) → saveToFile("/var/onlinemedia/hmi/albumArt.png")
+        └── iMediaInterface.requestProcessVibrantColor()          [QML → C++ invokable]
+            └── HmiOnlineMediaInterface::requestProcessVibrantColor()
+                └── pixel scan → emit sigUpdateVibrantColor("#a8312e")
+                    └── HmiOnlineMediaAppMain::connect(sigUpdateVibrantColor → onUpdateVibrantColor)
+                        └── PlayerSpotifyViewAdapter::onUpdateVibrantColor()
+                            └── emit sigOnUpdateVibrantColortoQML("#a8312e")
+                                └── PlayerSpotifyView.qml::onSigOnUpdateVibrantColor
+                                    └── new_vibrantColor = "#a8312e"
+                                        bg_animation.start()   ← ColorAnimation 400ms
+                                        tm_delayVibrant.start() ← Timer 400ms
+                                            └── vibrantColor = new_vibrantColor  ← gradient updates</code></pre>
+  </section>
+
+  <!-- 5 -->
+  <section class="detail-section" id="save-trigger">
+    <h2>5. Step 1 — QML Saves Artwork, Triggers C++</h2>
+    <p>
+      When the album art image finishes loading in QML (<code>Image.Ready</code>), the QML code
+      grabs a 100×100 thumbnail to disk and then calls back into C++:
+    </p>
+    <pre><code>// PlayerSpotifyView.qml — inside the Image element's onStatusChanged handler
+if (status === Image.Ready) {
+    albumArt.grabToImage(function(result) {
+        var saved = result.saveToFile("/var/onlinemedia/hmi/albumArt.png");
+        console.log("PlayerSpotifyView saved " + saved);
+        iMediaInterface.requestProcessVibrantColor();  // invoke C++ method
+    }, Qt.size(100, 100));   // ← scale down to 100×100 before saving
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><code>grabToImage(callback, Qt.size(100,100))</code></h4>
+        <p>
+          Renders the displayed QML <code>Image</code> element (already decoded, cached locally)
+          into an offscreen surface and converts it to a <code>QImage</code> at 100×100.
+          The downscale reduces pixel-scan iterations from ~90,000 (300×300) to 10,000.
+        </p>
+      </div>
+      <div class="card">
+        <h4><code>saveToFile(path)</code></h4>
+        <p>
+          Writes the 100×100 PNG to <code>/var/onlinemedia/hmi/albumArt.png</code> — the same
+          path the disk cache uses. The C++ side reads this exact file. Using a fixed path
+          (not a temp file) avoids filename-passing complexity in the signal: the C++ function
+          needs no argument.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="detail-section" id="cpp-extract">
+    <h2>6. Step 2 — C++ Scans Pixels, Emits Color</h2>
+    <p>
+      <code>requestProcessVibrantColor()</code> is declared as
+      <code>Q_INVOKABLE</code> on <code>HmiOnlineMediaInterface</code>, making it callable
+      directly from QML via the registered context property <code>iMediaInterface</code>:
+    </p>
+    <pre><code>// HmiOnlineMediaInterface.h
+Q_INVOKABLE void requestProcessVibrantColor();
+
+// Signal emitted when the best colour is found
+void sigUpdateVibrantColor(QString vibrantColor);</code></pre>
+
+    <p style="margin-top:1rem;">
+      After the pixel scan the best colour's hex string (e.g. <code>"#a8312e"</code>) is emitted
+      via <code>sigUpdateVibrantColor</code>. Qt's signal/slot mechanism queues this emission on the
+      main thread's event loop, ensuring the QML update happens on the UI thread regardless of where
+      the scan was initiated.
+    </p>
+  </section>
+
+  <!-- 7 -->
+  <section class="detail-section" id="signal-chain">
+    <h2>7. Step 3 — Signal Chain Through the Adapter</h2>
+    <p>
+      The colour signal travels from the interface layer through the adapter to reach the QML root object:
+    </p>
+    <pre><code>// HmiOnlineMediaAppMain.cpp — wiring at startup
+connect(m_onlineMediaInterface,       SIGNAL(sigUpdateVibrantColor(QString)),
+        m_hmiPlayerSpotifyViewAdapter, SLOT(onUpdateVibrantColor(QString)));</code></pre>
+
+    <pre><code>// PlayerSpotifyViewAdapter.cpp
+void PlayerSpotifyViewAdapter::onUpdateVibrantColor(QString vibrantColor) {
+    MTLOG_I(TAG, "onUpdateVibrantColor: %s", vibrantColor.toStdString().c_str());
+    emit sigOnUpdateVibrantColortoQML(vibrantColor);   // forward to QML root
+}</code></pre>
+
+    <pre><code>// PlayerSpotifyViewAdapter::connectBetweenUIandAdapter()
+connect(this, SIGNAL(sigOnUpdateVibrantColortoQML(QString)),
+        m_rootObject, SIGNAL(sigOnUpdateVibrantColor(QString)));</code></pre>
+
+    <p style="margin-top:1rem;">
+      The adapter layer is the same <em>Adapter pattern</em> used for all player events in the
+      codebase: it bridges the service-layer C++ signals to QML root-object signals, keeping the
+      interface layer unaware of QML and the QML side unaware of the C++ service layer.
+    </p>
+  </section>
+
+  <!-- 8 -->
+  <section class="detail-section" id="qml-animate">
+    <h2>8. Step 4 — QML Animates the Gradient</h2>
+    <p>
+      The QML player view maintains two colour properties — <code>vibrantColor</code> (currently
+      rendered) and <code>new_vibrantColor</code> (incoming target) — and uses a
+      <code>ColorAnimation</code> plus a <code>Timer</code> to animate between them:
+    </p>
+
+    <pre><code>// PlayerSpotifyView.qml — properties
+property string vibrantColor:     objectStyler.timeMode === "dark" ? "#21252E" : "#D2D2D2"
+property string new_vibrantColor: objectStyler.timeMode === "dark" ? "#21252E" : "#D2D2D2"</code></pre>
+
+    <pre><code>// Signal handler — called when C++ emits the new colour
+onSigOnUpdateVibrantColor: {
+    if (vibColor !== new_vibrantColor) {
+        new_vibrantColor = vibColor      // 1. store the new target
+        bg_animation.stop()
+        bg_animation.start()             // 2. start gradient colour animation
+        tm_delayVibrant.stop()
+        tm_delayVibrant.start()          // 3. start 400ms timer
+    }
+}</code></pre>
+
+    <pre><code>// 400ms delay timer — commits the new colour to the live property
+Timer {
+    id: tm_delayVibrant
+    interval: 400; running: false; repeat: false
+    onTriggered: vibrantColor = new_vibrantColor   // swap after animation completes
+}</code></pre>
+
+    <pre><code>// Background gradient rectangle using the animated colour
+Rectangle {
+    anchors.fill: parent
+    id: bg_spotify
+    gradient: Gradient {
+        GradientStop {
+            position: 0.0
+            color: vibrantColor
+
+            ColorAnimation on color {
+                id: bg_animation
+                to: new_vibrantColor
+                duration: 400              // 400ms smooth transition
+            }
+        }
+        GradientStop { position: 1.0; color: "transparent" }
+    }
+    opacity: 0.3   // subtle overlay — does not overpower album art
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><code>GradientStop</code> at 0.0</h4>
+        <p>Top of the background rectangle gets the vibrant colour (animated). Creates a glow emanating from the top of the screen.</p>
+      </div>
+      <div class="card">
+        <h4><code>GradientStop</code> at 1.0 — <code>transparent</code></h4>
+        <p>Bottom fades to transparent, so album art and controls are not obscured by the colour fill.</p>
+      </div>
+      <div class="card">
+        <h4><code>opacity: 0.3</code></h4>
+        <p>The tinted layer is semi-transparent — the dark background base rectangle shows through, maintaining readability of white text.</p>
+      </div>
+      <div class="card">
+        <h4>Two-property pattern (<code>vibrantColor</code> / <code>new_vibrantColor</code>)</h4>
+        <p>Separating "current" from "target" lets the animation play fully without jitter if a second track change arrives mid-animation — the timer is restarted and only the latest colour is applied.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="detail-section" id="why">
+    <h2>9. Why These Design Choices?</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Pixel Scanning Instead of k-Means Clustering?</h4>
+        <p>
+          k-Means requires either a native C++ library (unavailable under build constraints) or a
+          significant implementation effort. The pixel-scan heuristic achieves a perceptually
+          equivalent result — "find the most vibrant pixel" — in &lt; 1 ms using only Qt's
+          <code>QColor</code> API. For a background gradient that is rendered at 30% opacity, the
+          difference from a full palette extraction is invisible to the driver.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Downscale to 100×100 Before Scanning?</h4>
+        <p>
+          A Spotify artwork is 300×300 to 640×640 px. Scanning at full resolution would be
+          90,000–409,600 iterations, potentially causing a UI frame drop on the single-core
+          QNX HMI process. Downscaling to 100×100 caps the loop at 10,000 iterations while
+          preserving the overall colour distribution — album art colour is globally distributed,
+          not pixel-precise.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Save to a Fixed File Path?</h4>
+        <p>
+          <code>requestProcessVibrantColor()</code> takes no argument. The fixed path
+          <code>/var/onlinemedia/hmi/albumArt.png</code> acts as a contract between QML and C++.
+          This avoids marshalling a path string across the QML/C++ boundary and eliminates the
+          need for a dedicated IPC message just to pass a filename.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why HSL and Not RGB Distance?</h4>
+        <p>
+          RGB Euclidean distance would find the pixel most "similar to a reference RGB colour."
+          That requires choosing a reference colour, which varies per artwork. HSL lightness and
+          saturation targets define an abstract <em>vibe</em> — medium brightness, medium purity —
+          that reliably picks a pleasing accent colour from any image, regardless of its dominant hue.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why 400 ms Animation Duration?</h4>
+        <p>
+          400 ms is long enough to be perceived as a smooth, intentional transition (not a jarring
+          snap) but short enough not to still be animating when the user has already navigated away.
+          It matches the default Spotify app's background transition duration — the same number
+          passengers would have seen on their phones.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why <code>opacity: 0.3</code>?</h4>
+        <p>
+          The PIVI design guidelines required that the album art remain the visually dominant element.
+          A full-opacity coloured background would overpower the artwork and make white text labels
+          harder to read at certain colour values. 30% opacity creates the ambient glow effect
+          without competitive interference.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer style="text-align:center; padding:2rem; color:var(--text-muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:3rem;">
+  Online Media HMI — PIVI Project (Land Rover) &nbsp;·&nbsp; LG Electronics &nbsp;·&nbsp; 2021–2023
+</footer>
+
+</body>
+</html>

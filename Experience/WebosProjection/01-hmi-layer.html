@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HMI Layer | WebOS Projection Android BMW</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">WebOS Projection BMW / <span>HMI Layer</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">HMI Architecture</div>
+  <h1>HMI Layer: Transparent Jetpack Compose Launcher<br>over WebOS with AIDL Binder</h1>
+  <p class="subtitle">
+    How an Android Activity renders transparently on top of a WebOS container, communicates through AIDL
+    with System UID privileges, and exposes a clean Public API for third-party integration.
+  </p>
+  <div class="tags">
+    <span>Jetpack Compose</span><span>AIDL Binder</span><span>System UID</span>
+    <span>Transparent Activity</span><span>Public API</span><span>QNX Hypervisor</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#context">Architecture Context</a></li>
+      <li><a href="#transparent">Transparent Compose Activity over WebOS</a></li>
+      <li><a href="#systemuid">System UID Privileges</a></li>
+      <li><a href="#aidl">AIDL Binder for Service Communication</a></li>
+      <li><a href="#lifecycle">Lifecycle &amp; Key Event Forwarding</a></li>
+      <li><a href="#publicapi">Public API for Third-Party Integration</a></li>
+      <li><a href="#why">Why These Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. Context -->
+  <section class="detail-section" id="context">
+    <h2>1. Architecture Context</h2>
+    <p>
+      The BMW HKMC project runs on a <strong>QNX Hypervisor</strong> hosting two completely independent OS containers
+      side-by-side: a <strong>WebOS container</strong> (the main in-car infotainment) and an
+      <strong>Android VM container</strong> (for Android apps and services). The two containers communicate over
+      an <strong>LCP bus</strong> (LGE Container Protocol).
+    </p>
+    <p style="margin-top:1rem;">
+      The HMI layer is an Android application (<code>webosprojectionhmi</code>) that must appear visually on top
+      of whatever WebOS is rendering — acting as a transparent glass pane that can show Android popups, overlays,
+      and launchers without blocking the WebOS content underneath.
+    </p>
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-layer-group" style="color:var(--accent)"></i> &nbsp;WebOS Container</h4>
+        <p>Main car infotainment UI, apps, and services rendered by WebOS.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fab fa-android" style="color:var(--accent)"></i> &nbsp;Android VM Container</h4>
+        <p>Android apps, HMI overlay, projection service, and system service.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-exchange-alt" style="color:var(--accent)"></i> &nbsp;LCP Bus</h4>
+        <p>LGE's inter-container message bus bridging the two OS worlds.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Transparent Compose Activity -->
+  <section class="detail-section" id="transparent">
+    <h2>2. Transparent Compose Activity over WebOS</h2>
+    <p>
+      The key challenge: Android needs a visible window surface on screen, but it must not occlude the WebOS
+      rendering below. The solution is a <strong>fully transparent</strong> <code>ComponentActivity</code>
+      whose Compose content is an invisible <code>Box</code> — only popup layers rendered over it become visible.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">How it works</h3>
+    <p>
+      <code>MainActivity</code> declares itself as a <code>HOME</code> / <code>LAUNCHER</code> Activity so
+      Android treats it as the launcher — it is always present in the window stack. Its Compose tree renders
+      nothing by default (a transparent container), but the <code>ProjectionHmiViewModel</code> can push
+      overlays (popups, screen-share UI) into it on demand.
+    </p>
+
+    <pre><code><span class="c">// MainActivity.kt — stripped to essentials</span>
+<span class="kw">@AndroidEntryPoint</span>
+<span class="kw">class</span> MainActivity : ComponentActivity() {
+
+    <span class="kw">@Inject</span> lateinit <span class="kw">var</span> viewModel: ProjectionHmiViewModel
+
+    <span class="kw">override fun</span> onCreate(savedInstanceState: Bundle?) {
+        <span class="kw">super</span>.onCreate(savedInstanceState)
+        setContent {
+            <span class="c">// Fully transparent root — WebOS renders beneath this surface</span>
+            Box(modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Transparent)) {
+
+                <span class="c">// Overlay content pushed by ViewModel state (popups, screen-share UI)</span>
+                val isSharing <span class="kw">by</span> viewModel.isInScreenSharingMode.collectAsState()
+                <span class="kw">if</span> (isSharing) { ScreenShareOverlay() }
+            }
+        }
+        viewModel.activityLifecycleChange(<span class="str">"onCreate"</span>)
+    }
+
+    <span class="kw">override fun</span> onStart()   { viewModel.activityLifecycleChange(<span class="str">"onStart"</span>) }
+    <span class="kw">override fun</span> onResume()  { viewModel.activityLifecycleChange(<span class="str">"onResume"</span>) }
+    <span class="kw">override fun</span> onPause()   { viewModel.activityLifecycleChange(<span class="str">"onPause"</span>) }
+    <span class="kw">override fun</span> onStop()    { viewModel.activityLifecycleChange(<span class="str">"onStop"</span>) }
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4>Why Jetpack Compose?</h4>
+        <p>Compose's declarative model makes it trivial to show/hide overlays purely via state — no manual
+        <code>View.setVisibility()</code> juggling. Overlays appear when a <code>StateFlow</code> emits
+        <code>true</code> and vanish when it returns to <code>false</code>.</p>
+      </div>
+      <div class="card">
+        <h4>Why Not a regular View?</h4>
+        <p>Traditional XML layouts require separate inflation, <code>ViewGroup</code> management, and complex
+        animation code. Compose reduces the overlay feature to a single conditional block in the composition.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">AndroidManifest: HOME Launcher + transparent theme</h3>
+    <pre><code>&lt;activity
+    android:name=".main.MainActivity"
+    android:launchMode="singleTask"
+    android:theme="@android:style/Theme.Translucent.NoTitleBar.Fullscreen"
+    android:exported="true"&gt;
+    &lt;intent-filter&gt;
+        &lt;action android:name="android.intent.action.MAIN"/&gt;
+        &lt;category android:name="android.intent.category.HOME"/&gt;
+        &lt;category android:name="android.intent.category.LAUNCHER"/&gt;
+    &lt;/intent-filter&gt;
+&lt;/activity&gt;</code></pre>
+    <p style="margin-top:0.75rem;">
+      <code>singleTask</code> ensures only one instance exists. The translucent fullscreen theme sets the
+      window background to transparent at the framework level — no Compose workaround needed.
+    </p>
+  </section>
+
+  <!-- 3. System UID -->
+  <section class="detail-section" id="systemuid">
+    <h2>3. System UID Privileges</h2>
+    <p>
+      The HMI app is signed with the <strong>platform key</strong> and declares
+      <code>android:sharedUserId="android.uid.system"</code> — granting it the same UID (1000) as
+      <code>system_server</code>. This is mandatory for several capabilities the app needs:
+    </p>
+
+    <table>
+      <thead>
+        <tr><th>Capability</th><th>Why System UID Is Required</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>INTERACT_ACROSS_USERS</code></td>
+          <td>Bind to <code>WebosProjectionService</code> as user 0 regardless of current user session.</td>
+        </tr>
+        <tr>
+          <td>Launch Activity on specific Display ID</td>
+          <td><code>ActivityOptions.makeBasic().setLaunchDisplayId()</code> requires elevated privilege.</td>
+        </tr>
+        <tr>
+          <td>Bind to protected services</td>
+          <td><code>lge.wosp.service.PERMISSION_BIND_SERVICE</code> is a signature-level permission.</td>
+        </tr>
+        <tr>
+          <td>Window overlay without user prompt</td>
+          <td>System apps can draw overlays without the <code>SYSTEM_ALERT_WINDOW</code> prompt.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <pre><code><span class="c">&lt;!-- AndroidManifest.xml --&gt;</span>
+&lt;manifest
+    package="com.lge.app.car.webosprojectionhmi"
+    android:sharedUserId="android.uid.system"&gt;
+
+    &lt;uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/&gt;
+    &lt;uses-permission android:name="android.permission.INTERACT_ACROSS_USERS"/&gt;
+    &lt;uses-permission android:name="lge.wosp.service.PERMISSION_BIND_SERVICE"/&gt;
+
+    &lt;queries&gt;
+        &lt;!-- Required to query & bind the projection service --&gt;
+        &lt;intent&gt;
+            &lt;action android:name="com.lge.car.webosprojectionservice.IWebosProjectionInterface"/&gt;
+        &lt;/intent&gt;
+    &lt;/queries&gt;
+&lt;/manifest&gt;</code></pre>
+  </section>
+
+  <!-- 4. AIDL Binder -->
+  <section class="detail-section" id="aidl">
+    <h2>4. AIDL Binder for Service Communication</h2>
+    <p>
+      The HMI app communicates with the <code>WebosProjectionService</code> (running in a separate process) via
+      a pair of AIDL interfaces. AIDL generates the Binder stub/proxy boilerplate, giving you a type-safe,
+      process-boundary-crossing RPC call that looks like a regular function call.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">Interface design</h3>
+    <pre><code><span class="c">// IWebosProjection.aidl — Service exposes this</span>
+interface IWebosProjection {
+    <span class="c">// Register/unregister for push notifications from WebOS</span>
+    void registerWebosProjectionListener(in IWebosProjectionListener listener);
+    void unRegisterWebosProjectionListener(in IWebosProjectionListener listener);
+
+    <span class="c">// Synchronous read (used for initial state)</span>
+    String getWebosData(int msgId);
+
+    <span class="c">// Send a message to WebOS (fire-and-forget)</span>
+    void sendWebosData(int msgId, in String data);
+}
+
+<span class="c">// IWebosProjectionListener.aidl — HMI app implements this callback</span>
+interface IWebosProjectionListener {
+    <span class="c">// oneway = non-blocking; caller does not wait for return</span>
+    oneway void onWebosDataChanged(int msgId, in String data);
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4>Why Two Interfaces?</h4>
+        <p><code>IWebosProjection</code> is the service stub (server-side). <code>IWebosProjectionListener</code>
+        is the callback stub (client-side). This bidirectional pattern avoids polling — the service pushes
+        changes instantly to all registered listeners.</p>
+      </div>
+      <div class="card">
+        <h4>Why <code>oneway</code>?</h4>
+        <p>Binder calls are synchronous by default — the caller blocks until the callee returns. Adding
+        <code>oneway</code> to the callback makes it asynchronous: the service dispatches the notification
+        and immediately continues, avoiding deadlocks when the HMI app is busy.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.5rem;">HMI side: WebosProjectionManager binding</h3>
+    <pre><code><span class="c">// WebosProjectionManager.kt (simplified)</span>
+<span class="kw">@Singleton class</span> WebosProjectionManager <span class="kw">@Inject constructor</span>(...) {
+
+    <span class="kw">private var</span> binder: IWebosProjection? = <span class="kw">null</span>
+
+    <span class="kw">private val</span> connection = <span class="kw">object</span> : ServiceConnection {
+        <span class="kw">override fun</span> onServiceConnected(name: ComponentName, service: IBinder) {
+            binder = IWebosProjection.Stub.asInterface(service)
+            binder?.registerWebosProjectionListener(listener)
+            flushPendingMessages()   <span class="c">// deliver queued messages</span>
+        }
+        <span class="kw">override fun</span> onServiceDisconnected(name: ComponentName) {
+            binder = <span class="kw">null</span>
+        }
+    }
+
+    <span class="kw">private val</span> listener = <span class="kw">object</span> : IWebosProjectionListener.Stub() {
+        <span class="kw">override fun</span> onWebosDataChanged(msgId: Int, data: String) {
+            dispatchMessage(msgId, data)   <span class="c">// fan-out to registered IFunctionalHandler</span>
+        }
+    }
+
+    fun bindService() {
+        context.bindServiceAsUser(
+            Intent(ACTION_WOSP_SERVICE).setPackage(WOSP_SERVICE_PACKAGE),
+            connection, BIND_AUTO_CREATE, UserHandle.of(0))
+    }
+}</code></pre>
+  </section>
+
+  <!-- 5. Lifecycle & Key Events -->
+  <section class="detail-section" id="lifecycle">
+    <h2>5. Lifecycle &amp; Key Event Forwarding</h2>
+    <p>
+      WebOS needs to know whether the Android HMI overlay is focused and in the foreground (so it can adjust
+      audio routing, focus management, etc.). The <code>MainActivity</code> forwards every Android lifecycle
+      callback as a message through the service chain all the way to WebOS.
+    </p>
+
+    <pre><code><span class="c">// ProjectionHmiViewModel.kt</span>
+<span class="kw">@HiltViewModel class</span> ProjectionHmiViewModel <span class="kw">@Inject constructor</span>(
+    <span class="kw">private val</span> wospManager: WebosProjectionManager
+) : ViewModel() {
+
+    fun activityLifecycleChange(state: String) {
+        wospManager.sendMessage(WebosInternalMessage.HmiLifeCycle(state))
+        <span class="c">// → serialized to JSON → IWebosProjection.sendWebosData()
+        // → WospHmiProxy → WospFocusManager
+        // → WospSystemProxy → LCP Bus → WebOS</span>
+    }
+
+    fun dispatchKeyEvent(keyCode: Int, action: Int) {
+        wospManager.sendMessage(WebosInternalMessage.KeyEvent(keyCode, action))
+    }
+}</code></pre>
+
+    <div class="insight-box" style="margin-top:1rem;">
+      <strong><i class="fas fa-lightbulb"></i> Key insight:</strong>
+      The lifecycle flow travels across three process boundaries:
+      <code>HMI App → WebosProjectionService → ContainerCommunicationService → LCP JNI → WebOS</code>.
+      Each hop uses AIDL, making the cross-process calls transparent to the calling code.
+    </div>
+
+    <p style="margin-top:1rem;">
+      Key events (DPAD, BACK from physical hardware buttons) are intercepted in
+      <code>MainActivity.dispatchKeyEvent()</code> and forwarded via the same message pipeline.
+      On the service side, <code>WospInputProxy</code> handles special hardware keys (Netflix, YouTube, Home)
+      and translates them to WebOS string keys (<code>"DOWN"</code>, <code>"UP"</code>, etc.).
+    </p>
+  </section>
+
+  <!-- 6. Public API -->
+  <section class="detail-section" id="publicapi">
+    <h2>6. Public API for Third-Party Integration</h2>
+    <p>
+      The <code>WebosprojectionApi</code> module is a standalone Android library (<code>.aar</code>) that any
+      third-party app can embed to communicate with the projection service — without needing to know the
+      internal AIDL interfaces or Hilt DI setup.
+    </p>
+
+    <h3 style="margin-top:1.5rem;">API Design</h3>
+    <pre><code><span class="c">// WebosProjectionApiManager.kt — simplified singleton</span>
+<span class="kw">class</span> WebosProjectionApiManager <span class="kw">private constructor</span>(context: Context) {
+
+    <span class="kw">companion object</span> {
+        <span class="kw">@Volatile private var</span> INSTANCE: WebosProjectionApiManager? = <span class="kw">null</span>
+
+        fun getInstance(context: Context) =
+            INSTANCE ?: <span class="kw">synchronized</span>(<span class="kw">this</span>) {
+                INSTANCE ?: WebosProjectionApiManager(context).also { INSTANCE = it }
+            }
+    }
+
+    <span class="c">/** Connect to the projection service */</span>
+    fun connect() { bindServiceAsUser(...) }
+
+    <span class="c">/** Disconnect cleanly */</span>
+    fun disconnect() { context.unbindService(connection) }
+
+    <span class="c">/** Register for push updates on specific message IDs */</span>
+    fun registerListener(msgIds: List&lt;Int&gt;, listener: IWebosProjectionApiListener) { ... }
+
+    <span class="c">/** Send a fire-and-forget message */</span>
+    fun sendMessage(messageId: Int, data: String?) { ... }
+
+    <span class="c">/** Synchronous getter for current state */</span>
+    fun getMessage(messageId: Int): String? = binder?.getWebosData(messageId)
+}
+
+<span class="c">// Listener interface a third-party app implements</span>
+interface IWebosProjectionApiListener {
+    fun onWebosDataReceived(messageId: Int, data: String?)
+}</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4>Why a Separate API Module?</h4>
+        <p>Third-party apps (navigation, media, phone) should not depend on internal HMI or service details.
+        The API module acts as a <strong>stable contract</strong> — internal refactors do not break external
+        integrators as long as the API surface is unchanged.</p>
+      </div>
+      <div class="card">
+        <h4>Thread Safety</h4>
+        <p>The <code>@Volatile</code> singleton with <code>synchronized</code> double-checked locking
+        ensures that concurrent calls from multiple threads always get the same instance,
+        even before the service is connected. Pending messages are queued and flushed on connect.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Why -->
+  <section class="detail-section" id="why">
+    <h2>7. Why These Choices?</h2>
+    <table>
+      <thead>
+        <tr><th>Choice</th><th>Alternatives Considered</th><th>Reason Selected</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Transparent Compose Activity</td>
+          <td>System overlay window (<code>TYPE_APPLICATION_OVERLAY</code>)</td>
+          <td>Activity gives full lifecycle integration, back-stack, and Compose host without extra permission flow.</td>
+        </tr>
+        <tr>
+          <td>AIDL Binder IPC</td>
+          <td>Broadcast intents, Messenger, ContentProvider</td>
+          <td>AIDL gives type-safe, bidirectional, low-latency RPC with Java/Kotlin generated stubs. Essential for sub-100ms event latency in automotive.</td>
+        </tr>
+        <tr>
+          <td>System UID (<code>sharedUserId</code>)</td>
+          <td>Privileged app without <code>sharedUserId</code></td>
+          <td>Cross-user binding and display-specific launch require UID 1000. No other mechanism provides the same capability.</td>
+        </tr>
+        <tr>
+          <td>Public API module (.aar)</td>
+          <td>Expose service AIDL directly</td>
+          <td>Stable API boundary. Third parties are shielded from internal refactors. Simplifies versioning and documentation.</td>
+        </tr>
+        <tr>
+          <td>Jetpack Compose for overlays</td>
+          <td>XML View inflation per popup</td>
+          <td>Single conditional composition tree — no view inflation, no <code>LayoutInflater</code>, no <code>ViewGroup</code> management. Overlay toggling is a single state change.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer class="detail-footer">
+  <p>WebOS Projection Android BMW — HMI Layer &nbsp;|&nbsp; LG Electronics</p>
+</footer>
+</body>
+</html>

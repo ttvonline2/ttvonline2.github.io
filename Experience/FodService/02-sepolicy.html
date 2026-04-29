@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SEPolicy – nissan_fod_file | FoD Service – AIVI Nissan & Renault</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">FoD Service – AIVI / <span>SELinux Policy</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Security / SELinux</div>
+  <h1>SEPolicy: Dedicated <code>nissan_fod_file</code> Label<br>with Exclusive Access for <code>alliancecarservice_app</code></h1>
+  <p class="subtitle">
+    How a custom SELinux security context was defined to lock down FoD persistent storage so that
+    only the authorised car-service process can read and write feature-on-demand configuration —
+    and every other process on the system is silently denied.
+  </p>
+  <div class="tags">
+    <span>SELinux</span><span>Android Automotive OS</span><span>MAC (Mandatory Access Control)</span>
+    <span>Type Enforcement</span><span>File Contexts</span><span>Persist Partition</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#context">Why SELinux Matters for FoD</a></li>
+      <li><a href="#selinux-primer">A 2-Minute SELinux Primer</a></li>
+      <li><a href="#threat-model">The Threat Model</a></li>
+      <li><a href="#type-definition">Defining the Type: <code>file.te</code></a></li>
+      <li><a href="#file-contexts">Labelling the Path: <code>file_contexts</code></a></li>
+      <li><a href="#te-rules">Granting Access: <code>alliancecarservice_app.te</code></a></li>
+      <li><a href="#full-policy">The Three Files Together</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+      <li><a href="#verification">Verifying the Policy</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 -->
+  <section class="detail-section" id="context">
+    <h2>1. Why SELinux Matters for FoD</h2>
+    <p>
+      FoD parameter data lives in the <strong>persist partition</strong>:
+      <code>/mnt/product/persist-alliance/fod/</code>. This directory is <em>not</em> wiped on
+      OTA updates, so it stores vehicle feature entitlement data (e.g. "heated seats: enabled")
+      that the OEM sells to the customer.
+    </p>
+    <p style="margin-top:1rem;">
+      Without an explicit SELinux policy, any process running on the Android Automotive system
+      could — intentionally or through a vulnerability — read or overwrite those files:
+    </p>
+    <ul style="margin:1rem 0 1rem 2rem; line-height:2.2;">
+      <li>A rogue third-party app could <strong>read</strong> which premium features the customer has activated.</li>
+      <li>A compromised media-player process could <strong>overwrite</strong> fod_data and disable paid features.</li>
+      <li>An untested system daemon could <strong>corrupt</strong> fod_state, stalling the execution pipeline.</li>
+    </ul>
+    <p>
+      The solution: define a unique SELinux <em>type</em> for the FoD directory and grant
+      read/write permission <strong>exclusively</strong> to the car-service process domain.
+    </p>
+  </section>
+
+  <!-- 2 -->
+  <section class="detail-section" id="selinux-primer">
+    <h2>2. A 2-Minute SELinux Primer</h2>
+    <p>
+      SELinux implements <strong>Mandatory Access Control (MAC)</strong>: even if a process runs
+      as root, it still needs an explicit <em>allow</em> rule in policy to access a resource.
+      Android Automotive enforces SELinux in <strong>Enforcing</strong> mode — denials generate
+      an <code>avc: denied</code> log entry and the syscall is blocked at kernel level.
+    </p>
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-tag" style="color:var(--accent)"></i> &nbsp;Type</h4>
+        <p>A label attached to a process (<em>domain</em>) or a file (<em>file type</em>). E.g. <code>nissan_fod_file</code>.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check" style="color:var(--accent)"></i> &nbsp;Allow Rule</h4>
+        <p><code>allow &lt;domain&gt; &lt;type&gt;:&lt;class&gt; &lt;permissions&gt;;</code> — grants a specific permission set.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-map-marker" style="color:var(--accent)"></i> &nbsp;File Context</h4>
+        <p>Maps a filesystem path pattern to a type. The kernel applies this label when the file is created.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-ban" style="color:var(--accent)"></i> &nbsp;Default Deny</h4>
+        <p>Any access without an explicit <code>allow</code> is denied. No whitelist = blocked.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="detail-section" id="threat-model">
+    <h2>3. The Threat Model</h2>
+    <p>
+      The FoD directory must satisfy these access-control properties:
+    </p>
+    <div style="overflow-x:auto; margin-top:1rem;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+        <thead>
+          <tr style="background:var(--bg-code); color:var(--text-heading);">
+            <th style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Actor</th>
+            <th style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Read</th>
+            <th style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Write</th>
+            <th style="padding:0.75rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Create/Delete</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td style="padding:0.6rem 1rem;"><code>alliancecarservice_app</code> (FoD service process)</td>
+            <td style="padding:0.6rem 1rem; color:#00d4aa;">✅ YES</td>
+            <td style="padding:0.6rem 1rem; color:#00d4aa;">✅ YES</td>
+            <td style="padding:0.6rem 1rem; color:#00d4aa;">✅ YES</td>
+          </tr>
+          <tr style="background:rgba(108,99,255,0.04);">
+            <td style="padding:0.6rem 1rem;">Any other system service (HVAC, Seat, Settings…)</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+          </tr>
+          <tr>
+            <td style="padding:0.6rem 1rem;">Third-party apps (any UID)</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+          </tr>
+          <tr style="background:rgba(108,99,255,0.04);">
+            <td style="padding:0.6rem 1rem;">ADB shell (during development, shell domain)</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED (enforcing)</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+            <td style="padding:0.6rem 1rem; color:#ff6b6b;">❌ DENIED</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="detail-section" id="type-definition">
+    <h2>4. Defining the Type: <code>file.te</code></h2>
+    <p>
+      The first step is declaring the new type in the SELinux policy source. The file
+      <code>sepolicy/private/file.te</code> declares <code>nissan_fod_file</code> and assigns it
+      to the standard Android file-type attribute groups:
+    </p>
+    <pre><code># sepolicy/private/file.te
+
+type nissan_fod_file, file_type, data_file_type, core_data_file_type;</code></pre>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><code>file_type</code></h4>
+        <p>Base Android attribute required for any type used to label files. Enables generic file-system rules.</p>
+      </div>
+      <div class="card">
+        <h4><code>data_file_type</code></h4>
+        <p>Marks the type as data storage (like <code>/data</code> subtypes). Required by some framework-level backup/restore macros.</p>
+      </div>
+      <div class="card">
+        <h4><code>core_data_file_type</code></h4>
+        <p>
+          Ensures the type inherits from Android's core data group — necessary to satisfy
+          <code>noverify</code> and <code>seinfo</code> checks during system boot validation.
+        </p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      By inheriting these attributes the type slots cleanly into Android's existing policy
+      framework without triggering CTS/VTS compatibility failures, while remaining a
+      completely new namespace that no existing rule can accidentally match.
+    </p>
+  </section>
+
+  <!-- 5 -->
+  <section class="detail-section" id="file-contexts">
+    <h2>5. Labelling the Path: <code>file_contexts</code></h2>
+    <p>
+      Declaring the type is not enough — the kernel must know which filesystem paths should
+      receive the label. <code>sepolicy/private/file_contexts</code> provides the mapping:
+    </p>
+    <pre><code># sepolicy/private/file_contexts
+
+/mnt/product/persist-alliance/fod(/.*)?    u:object_r:nissan_fod_file:s0</code></pre>
+
+    <p style="margin-top:1rem;">Breaking down each field:</p>
+    <div class="card-grid">
+      <div class="card">
+        <h4><code>/mnt/product/persist-alliance/fod(/.*)?</code></h4>
+        <p>
+          Regex matching the directory itself <em>and</em> every file inside it recursively.
+          The <code>(/.*)?</code> suffix is standard SELinux regex notation for "this path or anything under it".
+        </p>
+      </div>
+      <div class="card">
+        <h4><code>u:object_r:nissan_fod_file:s0</code></h4>
+        <p>
+          Full SELinux security context: user <code>u</code>, role <code>object_r</code> (standard
+          for all file objects), type <code>nissan_fod_file</code>, sensitivity level <code>s0</code>
+          (MLS not used on this platform).
+        </p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      The label is stamped onto new files at <strong>creation time</strong> by the kernel's
+      <code>security_fs_use_trans</code> hook. Running <code>restorecon -R /mnt/product/persist-alliance/fod/</code>
+      applies the label to existing files (needed after OTA deploys the new policy).
+    </p>
+  </section>
+
+  <!-- 6 -->
+  <section class="detail-section" id="te-rules">
+    <h2>6. Granting Access: <code>alliancecarservice_app.te</code></h2>
+    <p>
+      Finally, the actual permission grant. <code>sepolicy/private/alliancecarservice_app.te</code>
+      adds three <code>allow</code> rules to the car-service domain:
+    </p>
+    <pre><code># sepolicy/private/alliancecarservice_app.te
+
+# 1. Read the persist-alliance directory (needed to list parent paths)
+allow alliancecarservice_app { mnt_product_file persist_alliance_file }:dir r_dir_perms;
+
+# 2. Full directory access on the FoD subdirectory (create, list, delete entries)
+allow alliancecarservice_app nissan_fod_file:dir { rw_dir_perms create_dir_perms };
+
+# 3. Full file access (open, read, write, create, unlink)
+allow alliancecarservice_app nissan_fod_file:file { rw_file_perms create_file_perms };</code></pre>
+
+    <p style="margin-top:1.5rem;">Macro expansions for reference:</p>
+
+    <div style="overflow-x:auto; margin-top:1rem;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.88rem;">
+        <thead>
+          <tr style="background:var(--bg-code); color:var(--text-heading);">
+            <th style="padding:0.7rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Macro</th>
+            <th style="padding:0.7rem 1rem; border-bottom:1px solid var(--border); text-align:left;">Expands to (key permissions)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:0.6rem 1rem;"><code>r_dir_perms</code></td><td style="padding:0.6rem 1rem;">open read getattr search ioctl</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;"><code>rw_dir_perms</code></td><td style="padding:0.6rem 1rem;">r_dir_perms + write add_name remove_name</td></tr>
+          <tr><td style="padding:0.6rem 1rem;"><code>create_dir_perms</code></td><td style="padding:0.6rem 1rem;">rw_dir_perms + create setattr relabelfrom relabelto</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;"><code>rw_file_perms</code></td><td style="padding:0.6rem 1rem;">open read write getattr ioctl lock</td></tr>
+          <tr><td style="padding:0.6rem 1rem;"><code>create_file_perms</code></td><td style="padding:0.6rem 1rem;">rw_file_perms + create setattr unlink rename</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      Rule 1 grants <em>read-only traversal</em> of the parent directories — required so the
+      process can resolve the full path at runtime. Rules 2 and 3 grant full create/read/write
+      access exclusively to the FoD namespace. No other domain has any of these permissions on
+      <code>nissan_fod_file</code>.
+    </p>
+  </section>
+
+  <!-- 7 -->
+  <section class="detail-section" id="full-policy">
+    <h2>7. The Three Files Together</h2>
+    <p>The complete policy contribution consists of exactly three files in the private policy directory:</p>
+
+    <pre><code>sepolicy/private/
+├── file.te              ← declares the type
+├── file_contexts        ← maps filesystem path → type
+└── alliancecarservice_app.te   ← grants permissions to the service domain</code></pre>
+
+    <p style="margin-top:1rem;">
+      Placing them in <code>private/</code> means the rules are compiled into the
+      <strong>system policy partition</strong> and cannot be overridden by vendor policy — important
+      for ASPICE traceability and audit.
+    </p>
+  </section>
+
+  <!-- 8 -->
+  <section class="detail-section" id="why">
+    <h2>8. Why This Approach?</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Not Linux DAC (chmod/chown)?</h4>
+        <p>
+          DAC (Discretionary Access Control) works by UID/GID ownership. Any process running
+          as the <em>same</em> UID — or as root — bypasses DAC. SELinux MAC is enforced regardless
+          of UID: even <code>root</code> is denied if there is no matching <code>allow</code> rule.
+          Automotive security guidelines require MAC for persistent feature data.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why a Dedicated Type (Not Reuse Existing)?</h4>
+        <p>
+          Reusing <code>persist_alliance_file</code> or <code>mnt_product_file</code> would share the
+          label with other services that have legitimate access to those paths. A dedicated
+          <code>nissan_fod_file</code> type enables <em>least-privilege</em>: the blast radius of any
+          vulnerability in another service cannot reach FoD data.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why <code>private/</code> Policy Location?</h4>
+        <p>
+          Android's SELinux build system merges <code>public/</code>, <code>private/</code>, and
+          <code>vendor/</code> policies separately. Declaring the type in <code>private/</code>
+          keeps it in the system image and prevents vendor OTA patches from accidentally
+          expanding access to FoD files.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why <code>core_data_file_type</code>?</h4>
+        <p>
+          Android CTS/VTS run neverallow checks against <code>core_data_file_type</code> to ensure
+          no dangerous domains (e.g. <code>untrusted_app</code>) can access core data files.
+          By assigning this attribute to <code>nissan_fod_file</code>, the standard platform
+          neverallow rules automatically protect FoD data from all untrusted app domains —
+          zero extra lines needed.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Separate Dir and File Rules?</h4>
+        <p>
+          SELinux distinguishes between <code>:dir</code> and <code>:file</code> object classes.
+          A <code>:file</code> allow alone does not let the process list or create directory entries.
+          Explicit <code>:dir { rw_dir_perms create_dir_perms }</code> ensures the service can
+          initialise the directory on first boot and list entries for file existence checks.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;ASPICE Traceability</h4>
+        <p>
+          Every security requirement in the SRS (Software Requirements Spec) that referred to FoD
+          data protection maps to exactly these three files. SELinux policy is source-controlled and
+          diff-reviewable, satisfying ASPICE SWE.3 (software unit design) and SWE.4 (unit verification)
+          evidence requirements.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="detail-section" id="verification">
+    <h2>9. Verifying the Policy</h2>
+    <p>During development and testing, the policy was verified with:</p>
+
+    <pre><code># 1. Check the label on the filesystem
+adb shell ls -Z /mnt/product/persist-alliance/fod/
+# Expected: u:object_r:nissan_fod_file:s0
+
+# 2. Confirm process domain
+adb shell ps -Z | grep alliancecarservice
+# Expected: u:r:alliancecarservice_app:s0
+
+# 3. No AVC denials in logcat for FoD operations
+adb logcat | grep "avc: denied" | grep fod
+# Expected: (empty — no denials)
+
+# 4. Confirm other domains are blocked — attempt from shell
+adb shell ls /mnt/product/persist-alliance/fod/
+# Expected: ls: /mnt/product/persist-alliance/fod/: Permission denied
+
+# 5. Static policy audit with sepolicy-analyze
+sepolicy-analyze policy.30 neverallow -w</code></pre>
+
+    <p style="margin-top:1rem;">
+      Unit tests in the <code>swut</code> folder verify that <code>FileUtil.checkFileExist()</code>
+      returns the correct result from the service domain. Integration tests (SWIT) ran the full
+      FoD activation flow on a real device and confirmed that <code>fod_data</code> and
+      <code>fod_state</code> files were created with label <code>nissan_fod_file</code> and that
+      no AVC denials appeared in <code>dmesg</code>.
+    </p>
+  </section>
+
+</main>
+
+<footer style="text-align:center; padding:2rem; color:var(--text-muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:3rem;">
+  FoD Service — AIVI Project (Nissan &amp; Renault) &nbsp;·&nbsp; LG Electronics &nbsp;·&nbsp; 2023–2024
+</footer>
+
+</body>
+</html>

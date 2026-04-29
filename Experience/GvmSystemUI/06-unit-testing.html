@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Unit Testing — JUnit 4 & Mockito-Kotlin | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Unit Testing — JUnit 4 &amp; Mockito-Kotlin</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Testing</div>
+  <h1>Unit Testing SystemUI<br>with JUnit 4 &amp; Mockito-Kotlin</h1>
+  <p class="subtitle">How JUnit 4 and Mockito-Kotlin are applied to test SystemUI logic — mocking Android framework dependencies, verifying state machines, and running tests off-device with the Gradle test infrastructure wired to AndroidJUnitRunner.</p>
+  <div class="tags">
+    <span>JUnit 4</span><span>Mockito-Kotlin</span><span>Robolectric</span>
+    <span>AndroidJUnitRunner</span><span>Coroutines Test</span><span>State Machine</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#challenge">Testing Challenge in SystemUI</a></li>
+      <li><a href="#stack">Test Stack Decisions</a></li>
+      <li><a href="#mockito">Why Mockito-Kotlin over Java Mockito</a></li>
+      <li><a href="#patterns">Test Patterns Used</a></li>
+      <li><a href="#examples">Example: MinimalMode State Logic</a></li>
+      <li><a href="#examples2">Example: BurnIn Timer</a></li>
+      <li><a href="#gradle">Gradle Test Configuration</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <section class="detail-section" id="challenge">
+    <h2>1. Testing Challenge in SystemUI</h2>
+    <p>SystemUI is a privileged system application that runs directly on top of the Android framework. Its code is deeply coupled to framework classes that cannot be instantiated in a standard JVM test environment:</p>
+    <ul>
+      <li><code>WindowManager</code>, <code>Context</code>, <code>ContentResolver</code> — require an Android runtime</li>
+      <li><code>Settings.Global.getInt()</code> — reads from a ContentProvider backed by the system_server</li>
+      <li><code>Handler(Looper.getMainLooper())</code> — main looper doesn't exist in a JVM test</li>
+      <li>Dagger 2 component graphs — require all dependences to be constructible</li>
+    </ul>
+    <p>The strategy is to use <strong>constructor injection</strong> for all framework dependencies, so tests can provide mock instances, and to scope tests to <em>pure business logic</em> — state transitions, timer logic, signal routing — while mocking the Android boundary.</p>
+  </section>
+
+  <section class="detail-section" id="stack">
+    <h2>2. Test Stack Decisions</h2>
+    <div class="card-grid">
+      <div class="card">
+        <h4>JUnit 4</h4>
+        <p>Not JUnit 5 — AOSP / Android Gradle toolchain has stable JUnit 4 integration. AndroidJUnitRunner on-device tests are JUnit 4 based. Consistent across unit and instrumented tests.</p>
+      </div>
+      <div class="card">
+        <h4>Mockito-Kotlin</h4>
+        <p>Wrapper library from <code>org.mockito.kotlin</code> that makes Mockito idiomatic in Kotlin — no raw generics, proper null handling, type-safe argument matchers.</p>
+      </div>
+      <div class="card">
+        <h4>Robolectric (targeted)</h4>
+        <p>Used selectively for tests that need a real Android <code>Context</code> or <code>Resources</code> resolution without a device. Heavier than pure JVM mocking but avoids full instrumented test overhead.</p>
+      </div>
+      <div class="card">
+        <h4>kotlinx-coroutines-test</h4>
+        <p>For components using Kotlin Coroutines — replaces production dispatcher with <code>UnconfinedTestDispatcher</code> for synchronous test execution.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section" id="mockito">
+    <h2>3. Why Mockito-Kotlin over Java Mockito</h2>
+    <p>Raw Java Mockito has several pain points in Kotlin code:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">Java Mockito in Kotlin — problem</span>
+      </div>
+      <pre><code><span class="cm">// Raw Mockito — verbose, type-unsafe, null warning</span>
+<span class="kw">val</span> mockContext = Mockito.mock(Context::<span class="kw">class</span>.java)
+Mockito.<span class="fn">when</span>(mockContext.<span class="fn">getSystemService</span>(anyString())).thenReturn(mockWm)
+<span class="cm">// 'when' is a Kotlin keyword — must escape: `when`()</span></code></pre>
+    </div>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">mockito-kotlin — clean, idiomatic</span>
+      </div>
+      <pre><code><span class="kw">import</span> org.mockito.kotlin.*
+
+<span class="kw">val</span> mockContext: Context = <span class="fn">mock</span>()          <span class="cm">// inferred type</span>
+<span class="kw">val</span> mockWm: WindowManager = <span class="fn">mock</span>()
+
+<span class="fn">whenever</span>(mockContext.<span class="fn">getSystemService</span>(Context.WINDOW_SERVICE))
+    .<span class="fn">thenReturn</span>(mockWm)
+
+<span class="fn">verify</span>(mockWm).<span class="fn">addView</span>(<span class="fn">any</span>(), <span class="fn">any</span>())    <span class="cm">// no raw type parameters</span></code></pre>
+    </div>
+
+    <p>Mockito-Kotlin also handles Kotlin's non-null types correctly — <code>any()</code> returns a non-null T instead of null, avoiding <code>NullPointerException</code> in argument matchers.</p>
+  </section>
+
+  <section class="detail-section" id="patterns">
+    <h2>4. Test Patterns Used</h2>
+
+    <h3>Dependency Injection via Constructor</h3>
+    <p>All testable classes accept their dependencies through the constructor (enforced by Dagger at runtime). In tests, mocks are substituted directly:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">FpiMinimalModeControllerTest.kt</span>
+      </div>
+      <pre><code><span class="kw">class</span> <span class="tp">FpiMinimalModeControllerTest</span> {
+
+    <span class="kw">private val</span> mockContentResolver: ContentResolver = <span class="fn">mock</span>()
+    <span class="kw">private val</span> mockMinimalModeHelper: MinimalModeHelper = <span class="fn">mock</span>()
+    <span class="kw">private val</span> mockContext: Context = <span class="fn">mock</span>()
+
+    <span class="kw">private lateinit var</span> controller: FpiMinimalModeController
+
+    <span class="an">@Before</span>
+    <span class="kw">fun</span> <span class="fn">setUp</span>() {
+        <span class="fn">whenever</span>(mockContext.contentResolver).<span class="fn">thenReturn</span>(mockContentResolver)
+        controller = <span class="fn">FpiMinimalModeController</span>(mockContext, mockMinimalModeHelper)
+    }</code></pre>
+    </div>
+
+    <h3>Argument Capture</h3>
+    <p>Use <code>argumentCaptor()</code> to inspect values passed to mocked dependencies:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">Example: capture ContentObserver registration</span>
+      </div>
+      <pre><code><span class="an">@Test</span>
+<span class="kw">fun</span> <span class="nm">`registers observer on passenger state key`</span>() {
+    <span class="kw">val</span> uriCaptor = <span class="fn">argumentCaptor</span>&lt;Uri&gt;()
+    controller.<span class="fn">start</span>()
+    <span class="fn">verify</span>(mockContentResolver).<span class="fn">registerContentObserver</span>(
+        uriCaptor.<span class="fn">capture</span>(), <span class="fn">eq</span>(<span class="kw">true</span>), <span class="fn">any</span>()
+    )
+    assertThat(uriCaptor.firstValue.lastPathSegment)
+        .isEqualTo(<span class="st">"gmremote.state.passenger"</span>)
+}</code></pre>
+    </div>
+
+    <h3>Verifying Interactions</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">Example: passenger empty → launchMinimalMode called</span>
+      </div>
+      <pre><code><span class="an">@Test</span>
+<span class="kw">fun</span> <span class="nm">`launches minimal mode when passenger is empty`</span>() {
+    <span class="cm">// Given: passenger state = 0 (empty)</span>
+    <span class="fn">whenever</span>(Settings.Global.<span class="fn">getInt</span>(mockContentResolver,
+             <span class="st">"gmremote.state.passenger"</span>, <span class="nm">0</span>)).<span class="fn">thenReturn</span>(<span class="nm">0</span>)
+
+    <span class="cm">// When: trigger passenger state change</span>
+    controller.<span class="fn">onPassengerStateChanged</span>()
+
+    <span class="cm">// Then: minimal mode should launch</span>
+    <span class="fn">verify</span>(mockMinimalModeHelper).<span class="fn">launchMinimalMode</span>()
+    <span class="fn">verifyNoMoreInteractions</span>(mockMinimalModeHelper)
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="examples">
+    <h2>5. Example: MinimalMode State Logic Tests</h2>
+    <p>The controller has multiple state combinations. A parametrized test covers all:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">FpiMinimalModeControllerTest.kt</span>
+      </div>
+      <pre><code><span class="an">@Test</span>
+<span class="kw">fun</span> <span class="nm">`does NOT launch minimal mode when passenger is present`</span>() {
+    <span class="fn">whenever</span>(Settings.Global.<span class="fn">getInt</span>(any(), <span class="fn">eq</span>(<span class="st">"gmremote.state.passenger"</span>), <span class="fn">any</span>()))
+        .<span class="fn">thenReturn</span>(<span class="nm">1</span>)   <span class="cm">// 1 = Present</span>
+    controller.<span class="fn">onPassengerStateChanged</span>()
+    <span class="fn">verify</span>(mockMinimalModeHelper).<span class="fn">exitMinimalMode</span>()
+    <span class="fn">verify</span>(mockMinimalModeHelper, never()).<span class="fn">launchMinimalMode</span>()
+}
+
+<span class="an">@Test</span>
+<span class="kw">fun</span> <span class="nm">`launches when driving starts and passenger is absent`</span>() {
+    <span class="fn">whenever</span>(Settings.Global.<span class="fn">getInt</span>(any(), <span class="fn">eq</span>(<span class="st">"gmremote.state.passenger"</span>), <span class="fn">any</span>()))
+        .<span class="fn">thenReturn</span>(<span class="nm">0</span>)   <span class="cm">// Empty</span>
+    <span class="fn">whenever</span>(Settings.Global.<span class="fn">getInt</span>(any(), <span class="fn">eq</span>(<span class="st">"gmremote.state.driving"</span>), <span class="fn">any</span>()))
+        .<span class="fn">thenReturn</span>(<span class="nm">1</span>)   <span class="cm">// Driving</span>
+    controller.<span class="fn">onDrivingStateChanged</span>()
+    <span class="fn">verify</span>(mockMinimalModeHelper).<span class="fn">launchMinimalMode</span>()
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="examples2">
+    <h2>6. Example: BurnIn Timer Tests</h2>
+    <p>Handler-based timers require control of the Looper. Using <code>ShadowLooper</code> (Robolectric) or manual clock advancement:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">BurnInTimeoutHandlerTest.kt</span>
+      </div>
+      <pre><code><span class="an">@RunWith</span>(RobolectricTestRunner::<span class="kw">class</span>)
+<span class="kw">class</span> <span class="tp">BurnInTimeoutHandlerTest</span> {
+
+    <span class="kw">private val</span> mockCallback: BurnInCallback = <span class="fn">mock</span>()
+
+    <span class="an">@Before</span>
+    <span class="kw">fun</span> <span class="fn">setUp</span>() = BurnInTimeoutHandler.<span class="fn">setCallback</span>(mockCallback)
+
+    <span class="an">@Test</span>
+    <span class="kw">fun</span> <span class="nm">`fires callback after 110 minutes of no reset`</span>() {
+        BurnInTimeoutHandler.<span class="fn">resetTimer</span>()
+        <span class="cm">// Advance Robolectric's clock by 110 minutes</span>
+        ShadowLooper.<span class="fn">idleMainLooper</span>(<span class="nm">110</span> * <span class="nm">60</span> * <span class="nm">1000</span>, TimeUnit.MILLISECONDS)
+        <span class="fn">verify</span>(mockCallback).<span class="fn">onUserInactivityTimeout</span>()
+    }
+
+    <span class="an">@Test</span>
+    <span class="kw">fun</span> <span class="nm">`does NOT fire if reset is called before timeout`</span>() {
+        BurnInTimeoutHandler.<span class="fn">resetTimer</span>()
+        ShadowLooper.<span class="fn">idleMainLooper</span>(<span class="nm">60</span> * <span class="nm">60</span> * <span class="nm">1000</span>, TimeUnit.MILLISECONDS) <span class="cm">// 60 min</span>
+        BurnInTimeoutHandler.<span class="fn">resetTimer</span>()   <span class="cm">// restart countdown</span>
+        ShadowLooper.<span class="fn">idleMainLooper</span>(<span class="nm">60</span> * <span class="nm">60</span> * <span class="nm">1000</span>, TimeUnit.MILLISECONDS) <span class="cm">// another 60 min</span>
+        <span class="cm">// Total: 120 min elapsed but timer was reset at 60 → only 60 min since last reset</span>
+        <span class="fn">verify</span>(mockCallback, never()).<span class="fn">onUserInactivityTimeout</span>()
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="gradle">
+    <h2>7. Gradle Test Configuration</h2>
+    <p>The test runner is configured in <code>app/build.gradle</code>:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">app/build.gradle</span>
+      </div>
+      <pre><code>android {
+    defaultConfig {
+        testInstrumentationRunner <span class="st">'androidx.test.runner.AndroidJUnitRunner'</span>
+    }
+    testOptions {
+        unitTests.<span class="fn">all</span> {
+            <span class="cm">// Enabled in CI; locally disabled for faster builds</span>
+            enabled = <span class="kw">false</span>
+        }
+        unitTests {
+            includeAndroidResources = <span class="kw">true</span>  <span class="cm">// Required for Robolectric resource access</span>
+        }
+    }
+}
+
+dependencies {
+    testImplementation <span class="st">'junit:junit:4.13.2'</span>
+    testImplementation <span class="st">'org.mockito.kotlin:mockito-kotlin:5.2.1'</span>
+    testImplementation <span class="st">'org.robolectric:robolectric:4.12.1'</span>
+    testImplementation <span class="st">'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.0'</span>
+    androidTestImplementation <span class="st">'androidx.test.ext:junit:1.2.1'</span>
+    androidTestImplementation <span class="st">'androidx.test.espresso:espresso-core:3.6.1'</span>
+}</code></pre>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p><code>unitTests.all { enabled = false }</code> is set locally to prevent test execution during the main build cycle (which syncs to the build server). Tests are re-enabled in the CI/CD pipeline where a clean environment ensures accurate results. This avoids false failures from missing framework stubs in the dev environment.</p>
+    </div>
+  </section>
+
+  <section class="detail-section" id="why">
+    <h2>8. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The project is an automotive system application where bugs can affect safety-critical driver interfaces. Unit tests on state machine logic (MinimalMode trigger conditions, BurnIn timer restart behavior) provide fast regression feedback — running in milliseconds on a developer's machine with no device or emulator required. Mockito-Kotlin was chosen over Kotlin's <code>kotlinx.coroutines.test</code> MockK library because the existing AOSP SystemUI test patterns across the team used Mockito, ensuring consistency. JUnit 4 over JUnit 5 because <code>AndroidJUnitRunner</code> (used for instrumented on-device tests) is JUnit 4-based — using the same framework for both unit and integration tests reduces cognitive overhead and tooling configuration.</p>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

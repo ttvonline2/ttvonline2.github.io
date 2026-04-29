@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Navigation Bar Inset Blocking | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<!-- Back bar -->
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Navigation Bar Inset Blocking</span></span>
+</nav>
+
+<!-- Hero -->
+<header class="detail-hero">
+  <div class="category-badge">Framework Patch</div>
+  <h1>Blocking Apps from Drawing<br>Under the Navigation Bar</h1>
+  <p class="subtitle">
+    Some apps used the Android window-inset API to render content behind the navigation bar,
+    visually breaking the SystemUI layout. I traced the call chain into the framework,
+    patched the setter in <code>PhoneWindow.java</code>, and enforced the correct behaviour
+    system-wide as a temporary measure before a release milestone.
+  </p>
+  <div class="tags">
+    <span>Android Framework</span><span>WindowInsets</span><span>PhoneWindow</span>
+    <span>com.android.internal.policy</span><span>Pre-release Fix</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <!-- TOC -->
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#api-trace">Tracing the API into the Framework</a></li>
+      <li><a href="#patch">The Framework Patch</a></li>
+      <li><a href="#milestone">Pre-release Context &amp; Temporary Nature</a></li>
+      <li><a href="#followup">Follow-up: Requesting App-side Fixes</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. Problem -->
+  <section class="detail-section" id="problem">
+    <h2>1. The Problem</h2>
+    <p>
+      Android provides an API that lets app developers declare that their window should draw
+      <strong>behind system bars</strong> — including the navigation bar — so they can extend
+      their content edge-to-edge. In Java/Kotlin this is exposed via:
+    </p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Kotlin</span>
+        <span class="code-file">Any app's Activity.kt</span>
+      </div>
+      <pre><code><span class="cm">// Tells the framework: "let my window draw behind the nav bar"</span>
+WindowCompat.<span class="fn">setDecorFitsSystemWindows</span>(window, <span class="kw">false</span>)
+
+<span class="cm">// Older equivalent via legacy flags</span>
+window.<span class="fn">addFlags</span>(WindowManager.LayoutParams.<span class="kw">FLAG_LAYOUT_NO_LIMITS</span>)</code></pre>
+    </div>
+
+    <p>
+      On a normal consumer Android device this is intentional — apps handle insets manually and
+      the OS does not care. On our <strong>automotive head-unit</strong>, however, the navigation
+      bar is a SystemUI component that must always remain fully visible and unobstructed.
+      Several third-party apps that were integrated into the vehicle had used this API
+      (sometimes incorrectly, without then handling the insets themselves), causing their
+      content to slide underneath the navigation bar and visually overlap SystemUI.
+    </p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-exclamation-triangle" style="color:#f59e0b"></i> &nbsp;Symptom</h4>
+        <p>App content rendered behind the navigation bar, making nav bar buttons appear on top of app UI elements.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-layer-group" style="color:#6c63ff"></i> &nbsp;Root Cause</h4>
+        <p>Apps called <code>setDecorFitsSystemWindows(false)</code> or set <code>FLAG_LAYOUT_NO_LIMITS</code> without properly consuming window insets.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-calendar-check" style="color:#00d4aa"></i> &nbsp;Urgency</h4>
+        <p>Discovered close to a release milestone — a clean, guaranteed fix was needed immediately, even if temporary.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. API Trace -->
+  <section class="detail-section" id="api-trace">
+    <h2>2. Tracing the API into the Framework</h2>
+    <p>
+      To understand exactly what the API does under the hood — and where to intercept it —
+      I traced the call chain from the public SDK surface down into the AOSP framework source.
+    </p>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-content">
+          <strong>App calls <code>WindowCompat.setDecorFitsSystemWindows(window, false)</code></strong>
+          <span>AndroidX compatibility wrapper — delegates directly to <code>window.setDecorFitsSystemWindows(false)</code> on API 30+.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-content">
+          <strong><code>android.view.Window.setDecorFitsSystemWindows(boolean)</code></strong>
+          <span>Abstract method in the SDK-level <code>Window</code> class (<code>android.view</code> package). The concrete implementation lives in the framework.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-content">
+          <strong><code>PhoneWindow.setDecorFitsSystemWindows(boolean)</code></strong>
+          <span>The real implementation in <code>com.android.internal.policy.PhoneWindow</code>. This is where the flag is actually applied to the window's <code>DecorView</code> and its <code>WindowManager.LayoutParams</code>.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-content">
+          <strong><code>DecorView</code> adjusts layout &amp; dispatches insets</strong>
+          <span>The <code>DecorView</code> re-configures its layout fit flags and re-dispatches <code>WindowInsets</code> to child views, allowing app content to expand into system bar areas.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>
+        <strong><code>PhoneWindow.java</code></strong> lives at
+        <code>frameworks/base/core/java/com/android/internal/policy/PhoneWindow.java</code>
+        in the AOSP source tree. It is the single concrete implementation of
+        <code>android.view.Window</code> on all Android phones and automotive targets.
+        Every app window — activity, dialog, or system — goes through this class.
+      </p>
+    </div>
+  </section>
+
+  <!-- 3. Patch -->
+  <section class="detail-section" id="patch">
+    <h2>3. The Framework Patch</h2>
+    <p>
+      Once I identified <code>PhoneWindow.setDecorFitsSystemWindows()</code> as the entry point,
+      the fix was straightforward: <strong>override the method to always enforce that the decor
+      fits system windows</strong>, regardless of what the calling app requests. By returning
+      early after forcing the value to <code>true</code>, the framework ignores any app's
+      attempt to draw under the navigation bar.
+    </p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Java</span>
+        <span class="code-file">frameworks/base/core/java/com/android/internal/policy/PhoneWindow.java</span>
+      </div>
+      <pre><code><span class="cm">// ORIGINAL — honours the caller's request</span>
+<span class="kw">@Override</span>
+<span class="kw">public void</span> <span class="fn">setDecorFitsSystemWindows</span>(<span class="kw">boolean</span> decorFitsSystemWindows) {
+    mDecorFitsSystemWindows = decorFitsSystemWindows;
+    applyDecorFitsSystemWindows(decorFitsSystemWindows);
+}
+
+<span class="cm">// PATCHED — always enforce true; app request is silently ignored</span>
+<span class="kw">@Override</span>
+<span class="kw">public void</span> <span class="fn">setDecorFitsSystemWindows</span>(<span class="kw">boolean</span> decorFitsSystemWindows) {
+    <span class="cm">// [GVM-TEMP] Block apps from drawing under system bars before release milestone.</span>
+    <span class="cm">// Any app passing false is overridden here. Remove once apps are fixed.</span>
+    mDecorFitsSystemWindows = <span class="kw">true</span>;
+    <span class="fn">applyDecorFitsSystemWindows</span>(<span class="kw">true</span>);
+}</code></pre>
+    </div>
+
+    <div class="callout warn">
+      <i class="fas fa-wrench"></i>
+      <p>
+        This change was applied to the <strong>platform source</strong> and built into the system
+        image — not an app-level workaround. It affected every window on the device, guaranteeing
+        no app could bypass it regardless of which API variant they used.
+      </p>
+    </div>
+
+    <h3>Why this approach?</h3>
+    <ul style="margin-left:1.5rem; line-height:2.2;">
+      <li><strong>Single enforcement point</strong> — one change in the framework covers all apps, including those that use the legacy <code>FLAG_LAYOUT_NO_LIMITS</code> path funnelled through the same decor logic.</li>
+      <li><strong>Zero risk of regression</strong> in SystemUI itself — SystemUI does not call <code>setDecorFitsSystemWindows(false)</code> on its own windows.</li>
+      <li><strong>Immediately verifiable</strong> — after rebuilding and flashing the system image, the visual overlap was gone on all affected apps without touching any app APK.</li>
+    </ul>
+  </section>
+
+  <!-- 4. Milestone context -->
+  <section class="detail-section" id="milestone">
+    <h2>4. Pre-release Context &amp; Temporary Nature</h2>
+    <p>
+      The patch was introduced as a <strong>deliberate short-term measure</strong> ahead of a
+      release milestone. The priority was to ship a build where the navigation bar was
+      guaranteed to be unobstructed — negotiating individual fixes with each app team would have
+      taken longer than the available window.
+    </p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-flag-checkered" style="color:#6c63ff"></i> &nbsp;Milestone gate</h4>
+        <p>Navigation bar must be fully visible and unobstructed on all integrated apps before release sign-off.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-clock" style="color:#f59e0b"></i> &nbsp;Time constraint</h4>
+        <p>Insufficient time to coordinate fixes across multiple independent app teams before the deadline.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-shield-alt" style="color:#00d4aa"></i> &nbsp;Risk profile</h4>
+        <p>Framework change was low-risk: it made the system more restrictive, not more permissive, and had no side-effects on SystemUI itself.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      The patch included a clear comment (<code>// [GVM-TEMP]</code>) marking it as temporary
+      so it would not be silently carried forward after the milestone.
+    </p>
+  </section>
+
+  <!-- 5. Follow-up -->
+  <section class="detail-section" id="followup">
+    <h2>5. Follow-up: Requesting App-side Fixes</h2>
+    <p>
+      After the milestone passed, I identified all affected apps by searching for calls to
+      <code>setDecorFitsSystemWindows(false)</code> and <code>FLAG_LAYOUT_NO_LIMITS</code>
+      across the integrated app source repositories. For each offending app I raised a ticket
+      with the relevant team, documenting:
+    </p>
+
+    <ul style="margin-left:1.5rem; line-height:2.2;">
+      <li>Which API call was incorrect and why it is inappropriate on the automotive target.</li>
+      <li>The correct approach — either remove the call entirely, or, if edge-to-edge content was genuinely required, properly consume <code>WindowInsets</code> in their view hierarchy to avoid overlapping the nav bar.</li>
+      <li>A deadline for the fix, after which the framework patch would be reverted.</li>
+    </ul>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>
+        Once all app teams had submitted corrected builds and the fixes were verified on-device,
+        the temporary override in <code>PhoneWindow.java</code> was removed and the platform was
+        rebuilt, restoring the standard Android behaviour for any app that legitimately needed it.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<div style="padding:2rem; text-align:center;">
+  <a href="../../index.html#experience" style="color:var(--primary); font-weight:600; text-decoration:none;"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+</div>
+
+</body>
+</html>

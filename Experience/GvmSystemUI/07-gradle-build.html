@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gradle Build Configuration | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>Gradle Build Configuration</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Build System</div>
+  <h1>Gradle Build for SystemUI:<br>Streamlining Build &amp; Test Workflow</h1>
+  <p class="subtitle">How converting GvmSystemUI from a pure AOSP Soong/Make build to a Gradle Android project unlocked fast local development iteration, IDE integration, dependency management, unit testing, and automated APK signing — while keeping a sync pipeline to the AOSP build server.</p>
+  <div class="tags">
+    <span>Gradle 8.13</span><span>Kotlin 2.1</span><span>Dagger 2 / kapt</span>
+    <span>Platform Signing</span><span>AOSP Stubs</span><span>Python Sync Scripts</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#problem">The Problem with AOSP-only Build</a></li>
+      <li><a href="#solution">The Gradle + Soong Hybrid Strategy</a></li>
+      <li><a href="#stubs">AOSP Framework Stubs</a></li>
+      <li><a href="#signing">Platform Signing</a></li>
+      <li><a href="#dagger">Dagger 2 with kapt</a></li>
+      <li><a href="#sync">Sync Scripts</a></li>
+      <li><a href="#build-config">Full Build Configuration</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <section class="detail-section" id="problem">
+    <h2>1. The Problem with AOSP-only Build</h2>
+    <p>GvmSystemUI is derived from AOSP's SystemUI and, by default, must be built with the AOSP build system (<strong>Soong/Make</strong>). This means:</p>
+    <ul>
+      <li>A full AOSP checkout (~200 GB) is required to compile a single app</li>
+      <li>One compilation cycle takes <strong>15–30 minutes</strong> on the build server</li>
+      <li>No IDE auto-complete for AOSP internal APIs (<code>@hide</code>, <code>IWindowManager</code>, etc.)</li>
+      <li>Unit tests cannot run locally — no JVM test runner in Soong</li>
+      <li>Engineers spend most of their time waiting for remote builds and log parsing</li>
+    </ul>
+    <p>This is a well-known pain point for teams working on AOSP system applications. The solution is to set up a <strong>parallel Gradle build</strong> for local development while keeping Soong as the final integration build.</p>
+  </section>
+
+  <section class="detail-section" id="solution">
+    <h2>2. The Gradle + Soong Hybrid Strategy</h2>
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">1</div>
+        <div class="flow-content">
+          <strong>Developer edits source in Android Studio</strong>
+          <span>Full IDE features: auto-complete, refactoring, inline errors — because Gradle resolves AOSP stub JARs.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">2</div>
+        <div class="flow-content">
+          <strong>Gradle build locally</strong>
+          <span><code>./gradlew assembleDebug</code> — builds APK in ~30 seconds. Signs with the platform key. Installable directly on device via adb.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">3</div>
+        <div class="flow-content">
+          <strong>sync_from_soong.py / apply_local_to_soong.py</strong>
+          <span>Python scripts sync source files between the Gradle workspace and the AOSP source tree on the build server.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">4</div>
+        <div class="flow-content">
+          <strong>Full AOSP build on build server</strong>
+          <span>Soong compiles the synced sources as part of the platform image for final integration testing and OTA packaging.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="detail-section" id="stubs">
+    <h2>3. AOSP Framework Stubs</h2>
+    <p>SystemUI uses many <code>@hide</code> APIs that are not in the public Android SDK — <code>IWindowManager</code>, <code>IStatusBarService</code>, <code>InsetsFrameProvider</code>, internal <code>PowerManager</code> flags, etc. These are compiled against <strong>stub JARs</strong> extracted from the AOSP build output and placed in the <code>compile/</code> directory:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">app/build.gradle</span>
+      </div>
+      <pre><code><span class="kw">dependencies</span> {
+    <span class="cm">// Runtime libraries (included in APK)</span>
+    implementation <span class="fn">fileTree</span>(dir: <span class="st">'libs'</span>, include: [<span class="st">'*.jar'</span>, <span class="st">'*.aar'</span>])
+
+    <span class="cm">// Compile-only stubs — AOSP internal APIs (@hide)</span>
+    <span class="cm">// These exist on the device already; NOT bundled in APK</span>
+    compileOnly <span class="fn">fileTree</span>(dir: <span class="st">'compile'</span>, include: [<span class="st">'*.jar'</span>, <span class="st">'*.aar'</span>])
+}</code></pre>
+    </div>
+
+    <div class="callout warn">
+      <i class="fas fa-exclamation-triangle"></i>
+      <p><code>compileOnly</code> is critical here. If the stubs were added as <code>implementation</code>, Gradle would try to bundle them in the APK — causing conflicts with the framework classes already loaded in the device's boot classpath. <code>compileOnly</code> provides them only to the compiler (for type resolution and <code>@hide</code> API access) and they are excluded from the final APK.</p>
+    </div>
+
+    <h3>Key stub files in compile/</h3>
+    <table>
+      <thead><tr><th>File</th><th>Contains</th></tr></thead>
+      <tbody>
+        <tr><td><code>framework.jar</code></td><td>Full Android framework including <code>@hide</code> APIs</td></tr>
+        <tr><td><code>services.jar</code></td><td>system_server classes: <code>WindowManagerService</code>, <code>IStatusBarService</code></td></tr>
+        <tr><td><code>SystemUI-core.jar</code></td><td>AOSP SystemUI base classes that GvmSystemUI extends</td></tr>
+        <tr><td><code>lge-ui-lib-0.4.1.aar</code></td><td>LGE proprietary UI library (in <code>libs/</code> — runtime)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="detail-section" id="signing">
+    <h2>4. Platform Signing</h2>
+    <p>SystemUI runs with <code>android:sharedUserId="android.uid.systemui"</code> and requires <code>android:protectionLevel="signature"</code> permissions. This means the APK must be signed with the same platform key as the rest of the system image — otherwise the install will be rejected.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">app/build.gradle — signingConfigs</span>
+      </div>
+      <pre><code>android {
+    signingConfigs {
+        platform {
+            storeFile <span class="fn">file</span>(<span class="st">'./cert/platform.jks'</span>)
+            storePassword <span class="st">"android"</span>
+            keyAlias <span class="st">"androiddebugkey"</span>
+            keyPassword <span class="st">"android"</span>
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.platform
+            minifyEnabled <span class="kw">false</span>   <span class="cm">// cannot shrink SystemUI — breaks framework class loading</span>
+        }
+        debug {
+            signingConfig signingConfigs.platform
+        }
+    }
+}</code></pre>
+    </div>
+
+    <p>The <code>platform.jks</code> file contains the vendor's platform signing certificate — extracted from the AOSP build environment. <strong>Both debug and release builds use the platform key</strong> because the shared UID must match at all times; a debug-key APK cannot install alongside a platform-key system image.</p>
+  </section>
+
+  <section class="detail-section" id="dagger">
+    <h2>5. Dagger 2 with kapt</h2>
+    <p>GvmSystemUI uses Dagger 2 for dependency injection (consistent with AOSP SystemUI). Dagger 2 is an <em>annotation processor</em> — it reads <code>@Inject</code>, <code>@Module</code>, <code>@Component</code> annotations at compile time and generates the injection boilerplate. The Kotlin Annotation Processing Tool (<code>kapt</code>) bridges Kotlin source files to Java annotation processors:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">app/build.gradle</span>
+      </div>
+      <pre><code>apply plugin: <span class="st">'kotlin-kapt'</span>
+
+dependencies {
+    kapt <span class="st">'com.google.dagger:dagger-compiler:2.53.1'</span>
+    annotationProcessor <span class="st">'com.google.dagger:dagger-compiler:2.53.1'</span>
+    <span class="cm">// Both kapt and annotationProcessor declared — ensures Java source files</span>
+    <span class="cm">// in the mixed Java/Kotlin codebase are also processed</span>
+}</code></pre>
+    </div>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>Kotlin 2.1 (used in this project) has improved kapt compatibility. However, for new pure-Kotlin modules, KSP (Kotlin Symbol Processing) would be preferred over kapt as it is 2× faster. The project uses kapt because AOSP SystemUI's base Dagger setup is Java-based and KSP migration would require significant refactoring of the inherited component graph.</p>
+    </div>
+  </section>
+
+  <section class="detail-section" id="sync">
+    <h2>6. Sync Scripts</h2>
+    <p>Three Python scripts in <code>scripts/</code> manage the two-way sync between the Gradle workspace and the AOSP source tree:</p>
+
+    <table>
+      <thead><tr><th>Script</th><th>Direction</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>sync_from_soong.py</code></td><td>AOSP → Gradle</td><td>Pull latest base AOSP SystemUI sources from the build server into the local Gradle project</td></tr>
+        <tr><td><code>apply_local_to_soong.py</code></td><td>Gradle → AOSP</td><td>Push local changes to the AOSP source tree for the final platform build</td></tr>
+        <tr><td><code>sync_identical.py</code></td><td>Both</td><td>Sync files that are byte-for-byte identical between both trees (tracked in <code>identical.json</code>)</td></tr>
+      </tbody>
+    </table>
+
+    <p>The <code>SOONG_ROOT.json</code> file defines the mapping between Gradle source paths and their corresponding AOSP module paths on the build server. <code>comment_rules.json</code> defines code comment patterns that must be stripped or transformed during sync (e.g., Gradle-specific comments that would break Soong builds).</p>
+  </section>
+
+  <section class="detail-section" id="build-config">
+    <h2>7. Full Build Configuration Overview</h2>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">app/build.gradle — key settings</span>
+      </div>
+      <pre><code>android {
+    namespace <span class="st">'com.android.systemui'</span>
+    compileSdk <span class="nm">36</span>
+    archivesBaseName = <span class="st">"GvmSystemUI"</span>      <span class="cm">// output: GvmSystemUI-release.apk</span>
+
+    defaultConfig {
+        applicationId <span class="st">"com.android.systemui"</span>
+        minSdk <span class="nm">33</span>                           <span class="cm">// Android 13 minimum</span>
+        targetSdk <span class="nm">35</span>                         <span class="cm">// Android 15 target</span>
+        versionCode <span class="nm">202</span>
+        versionName <span class="st">"2.02"</span>
+        multiDexEnabled <span class="kw">true</span>               <span class="cm">// SystemUI exceeds 65k method limit</span>
+    }
+
+    buildFeatures {
+        dataBinding <span class="kw">true</span>                   <span class="cm">// Used in some legacy SystemUI views</span>
+        viewBinding <span class="kw">true</span>                   <span class="cm">// Used in new Kotlin components</span>
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        freeCompilerArgs = [<span class="st">'-Xjvm-default=all'</span>]  <span class="cm">// Kotlin interface default methods</span>
+        jvmTarget = <span class="st">'17'</span>
+    }
+
+    lint {
+        <span class="cm">// Suppress lint rules that flag internal Android API usage</span>
+        disable += [<span class="st">'ProtectedPermissions'</span>, <span class="st">'SystemPermissionTypo'</span>, <span class="st">'Instantiatable'</span>]
+        abortOnError = <span class="kw">false</span>
+    }
+
+    packagingOptions {
+        <span class="cm">// Exclude duplicate R classes generated by AOSP stubs and Gradle</span>
+        exclude <span class="st">'**/*.kotlin_module'</span>
+        exclude <span class="st">'META-INF/DEPENDENCIES'</span>
+    }
+}</code></pre>
+    </div>
+
+    <h3>Root build.gradle — dependency versions</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Groovy</span>
+        <span class="code-file">build.gradle (root)</span>
+      </div>
+      <pre><code>buildscript {
+    ext {
+        kotlin_version = <span class="st">'2.1.0'</span>        <span class="cm">// Kotlin 2.1 for Dagger 2.52+ compat</span>
+        hilt_version = <span class="st">'2.48'</span>
+    }
+    dependencies {
+        classpath <span class="st">"com.android.tools.build:gradle:8.13.0"</span>
+        classpath <span class="st">"org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"</span>
+        classpath <span class="st">"org.jetbrains.kotlinx:atomicfu-gradle-plugin:0.30.0-beta"</span>
+        <span class="cm">// atomicfu: lock-free atomic operations in Kotlin Coroutines internals</span>
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <section class="detail-section" id="why">
+    <h2>8. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The Gradle setup was the single most impactful workflow improvement in the project. Before it, a change to a layout XML required a 20-minute build server cycle, a 10-minute flash, and 5 minutes of device verification — <strong>35+ minutes per iteration</strong>. After the Gradle setup, the same layout change takes <strong>30 seconds to build, 10 seconds to adb push and restart SystemUI</strong>. That is a 70× improvement in feedback speed. The platform signing and AOSP stub approach are the two non-obvious technical prerequisites that make this possible — without them, the APK either fails to install (wrong key) or fails to compile (missing @hide APIs). The Python sync scripts then ensure that local Gradle changes flow cleanly back into the AOSP platform build, maintaining a single source of truth without manual copy-paste.</p>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <h4>70× faster iteration</h4>
+        <p>30s Gradle build vs. 30min AOSP build for local development changes.</p>
+      </div>
+      <div class="card">
+        <h4>Full IDE support</h4>
+        <p>Auto-complete, rename refactoring, and inline errors for @hide APIs via stub JARs.</p>
+      </div>
+      <div class="card">
+        <h4>Local unit tests</h4>
+        <p>JUnit tests run in milliseconds on the developer machine with no device required.</p>
+      </div>
+      <div class="card">
+        <h4>AOSP compatible</h4>
+        <p>Python sync scripts ensure Gradle source stays aligned with the final Soong platform build.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

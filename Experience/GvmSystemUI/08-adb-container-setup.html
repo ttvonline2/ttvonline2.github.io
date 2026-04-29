@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ADB Setup for Android LXC Container | GvmSystemUI</title>
+  <link rel="stylesheet" href="detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">GvmSystemUI / <span>ADB Setup for Android LXC Container</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Developer Environment</div>
+  <h1>ADB Setup into Android LXC Container<br>with Mountable System Partitions</h1>
+  <p class="subtitle">How ADB access was configured directly inside an Android container running on Yocto Linux — enabling push, shell, and install workflows without reflashing the device image — by mounting system/system_ext as writable overlay filesystems.</p>
+  <div class="tags">
+    <span>LXC Container</span><span>OverlayFS</span><span>adb disable-verity</span>
+    <span>dm-verity</span><span>ADB over USB</span><span>Yocto / AOSP</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#architecture">System Architecture: Linux + Android Container</a></li>
+      <li><a href="#problem">The Problem</a></li>
+      <li><a href="#step1">Step 1 — Disable dm-verity</a></li>
+      <li><a href="#step2">Step 2 — mount.bat: OverlayFS + pre-mount Script</a></li>
+      <li><a href="#premount">Inside pre-mount.sh: Partition Configuration</a></li>
+      <li><a href="#step3">Step 3 — adb-setup.bat: USB &amp; Network Init</a></li>
+      <li><a href="#workflow">Daily Developer Workflow</a></li>
+      <li><a href="#helper-scripts">Helper Scripts</a></li>
+      <li><a href="#why">Why This Approach?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1 Architecture -->
+  <section class="detail-section" id="architecture">
+    <h2>1. System Architecture: Linux + Android Container</h2>
+    <p>The GM vehicle platform (Qualcomm SA8155) runs <strong>Yocto Linux</strong> as the host OS. Android 15 runs as an <strong>LXC (Linux Container)</strong> guest named <code>android1</code> inside that Linux OS. The two systems share the same kernel but have isolated user-spaces.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4>Host OS</h4>
+        <p><strong>Yocto Linux</strong><br>Hardware abstraction, bootloader, LXC daemon, network, USB stack, <code>adb</code> endpoint</p>
+      </div>
+      <div class="card">
+        <h4>Guest</h4>
+        <p><strong>Android 15 (LXC container: android1)</strong><br>SystemUI, apps, VHAL, CarService — all standard Android services running inside the container namespace</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1rem;">ADB traffic enters through the Linux USB stack, is forwarded by <code>usb.service</code> (or via the USB RC file) into the Android container's <code>adbd</code> daemon. Without configuration, this chain is broken by default — the USB init scripts, network bridges, and verity protections all must be handled before ADB works.</p>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>The LXC container's rootfs is mounted at runtime from the physical partitions (<code>system</code>, <code>system_ext</code>, <code>vendor</code>) on the flash storage. By default these are read-only dm-verity protected partitions — you cannot push files to them without disabling verity and remounting with OverlayFS.</p>
+    </div>
+  </section>
+
+  <!-- 2 Problem -->
+  <section class="detail-section" id="problem">
+    <h2>2. The Problem</h2>
+    <p>A fresh image flash leaves the device in a state where:</p>
+    <ul>
+      <li><strong>dm-verity is enabled</strong> — the kernel verifies every block of the system partitions against a cryptographic hash tree. Any attempt to write to <code>/system</code>, <code>/system_ext</code>, or <code>/vendor</code> causes a kernel panic or boot loop.</li>
+      <li><strong>ADB is not routed to the container</strong> — the USB init RC file (<code>init.qcom.usb.rc</code>) that starts <code>adbd</code> inside the Android container needs to be configured correctly.</li>
+      <li><strong>Network bridge for ADB-over-TCP is not set up</strong> — the container's network interfaces (<code>reth0</code>, <code>reth1</code>) need to be brought up.</li>
+      <li><strong>System partitions are read-only</strong> — even after disabling verity, simply pushing an APK to <code>/system_ext/priv-app/</code> fails because the partitions are not remounted as writable.</li>
+    </ul>
+    <p>The solution is a sequence of two scripts — <code>mount.bat</code> and <code>adb-setup.bat</code> — plus supporting files, that together solve all four problems in the correct order.</p>
+  </section>
+
+  <!-- 3 Step 1 verity -->
+  <section class="detail-section" id="step1">
+    <h2>3. Step 1 — Disable dm-verity (<code>verity.bat</code>)</h2>
+    <p>This must be done <strong>once after every image flash</strong>, before mount.bat. It requires a reboot to take effect.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">setup/verity.bat</span>
+      </div>
+      <pre><code><span class="cm">@echo off</span>
+adb wait-for-device
+<span class="fn">echo</span> <span class="st">"root &amp; mount linux"</span>
+adb root
+adb disable-verity    <span class="cm">REM disables dm-verity, requires reboot to take effect</span></code></pre>
+    </div>
+
+    <p><code>adb disable-verity</code> patches the AVB (Android Verified Boot) metadata to mark the device as "unlocked-for-development". After the required reboot, the kernel will no longer validate partition block hashes, making them writable via remount or OverlayFS.</p>
+
+    <div class="callout warn">
+      <i class="fas fa-exclamation-triangle"></i>
+      <p>If you run <code>mount.bat</code> without disabling verity first, the overlay mount will succeed on the Linux host side but the Android container will fail to boot — the kernel detects modified data blocks and refuses to mount the partition.</p>
+    </div>
+  </section>
+
+  <!-- 4 Step 2 mount -->
+  <section class="detail-section" id="step2">
+    <h2>4. Step 2 — <code>mount.bat</code>: OverlayFS + pre-mount Script</h2>
+    <p><code>mount.bat</code> configures the Android container to use <strong>OverlayFS</strong> for <code>/system</code> and <code>/system_ext</code>. This makes them writable at the overlay layer while the underlying partitions remain read-only — no flash erase required. Changes persist in <code>/data/overlay/</code>.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">setup/mount.bat</span>
+      </div>
+      <pre><code><span class="cm">@echo off</span>
+<span class="fn">echo</span> <span class="st">"WARNING: YOU NEED TO DISABLE VERITY FIRST"</span>
+adb wait-for-device
+adb root
+adb shell <span class="st">"setenforce 0"</span>                       <span class="cm">REM permissive SELinux — needed on host Linux</span>
+adb shell <span class="st">"mount -o rw,remount /"</span>               <span class="cm">REM make Linux rootfs writable</span>
+
+<span class="cm">REM Create OverlayFS upper + workdir directories in /data (persists across reboots)</span>
+adb shell <span class="st">"mkdir /data/overlay"</span>
+adb shell <span class="st">"mkdir /data/overlay/system_ext"</span>
+adb shell <span class="st">"mkdir /data/overlay/system_ext/upper"</span>
+adb shell <span class="st">"mkdir /data/overlay/system_ext/workdir"</span>
+adb shell <span class="st">"mkdir /data/overlay/system"</span>
+adb shell <span class="st">"mkdir /data/overlay/system/upper"</span>
+adb shell <span class="st">"mkdir /data/overlay/system/workdir"</span>
+
+<span class="cm">REM Push the pre-mount shell script into the LXC config directory on the device</span>
+<span class="cm">REM LXC executes this script before starting the android1 container</span>
+adb push F:\01.env\05.gvm\setup\pre-mount.sh /etc/lxc/android1/pre-mount.sh
+
+<span class="cm">REM Push the LXC container config (network bridge, device mappings)</span>
+adb push F:\01.env\05.gvm\src\myconfig /etc/lxc/android1/config
+
+adb shell <span class="st">"chmod 755 /etc/lxc/android1/pre-mount.sh"</span>
+adb shell <span class="st">"sync"</span></code></pre>
+    </div>
+
+    <h3>What OverlayFS achieves</h3>
+    <p>OverlayFS merges two directory trees into one view:</p>
+    <table>
+      <thead><tr><th>Layer</th><th>Location</th><th>Access</th></tr></thead>
+      <tbody>
+        <tr><td><strong>lower</strong></td><td>Physical partition (<code>/dev/mapper/system_ext</code>)</td><td>Read-only</td></tr>
+        <tr><td><strong>upper</strong></td><td><code>/data/overlay/system_ext/upper</code></td><td>Read-write (on eMMC /data)</td></tr>
+        <tr><td><strong>work</strong></td><td><code>/data/overlay/system_ext/workdir</code></td><td>Internal bookkeeping</td></tr>
+        <tr><td><strong>merged</strong> (view)</td><td><code>${LXC_ROOTFS_PATH}/system_ext</code></td><td>Android container sees this — reads come from lower, writes go to upper</td></tr>
+      </tbody>
+    </table>
+    <p>The result: <code>adb push GvmSystemUI.apk /system_ext/priv-app/GvmSystemUI/GvmSystemUI.apk</code> writes to <code>/data/overlay/system_ext/upper/priv-app/...</code> — the physical partition is never touched, and the change survives reboots.</p>
+  </section>
+
+  <!-- 5 pre-mount.sh -->
+  <section class="detail-section" id="premount">
+    <h2>5. Inside pre-mount.sh: Partition Mounting Logic</h2>
+    <p>This shell script is executed by the <strong>LXC daemon</strong> on the Linux host immediately before the Android container starts. It is the bridge between the Linux block devices and the Android rootfs. The script handles three cases based on what block devices are present:</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Shell</span>
+        <span class="code-file">setup/pre-mount.sh (key sections)</span>
+      </div>
+      <pre><code><span class="cm">#!/bin/sh</span>
+LXC_OVERLAY_FILES_PATH=/etc/lxc/overlay/${LXC_NAME}
+
+<span class="kw">if</span> [ -e <span class="st">"/dev/device-mapper"</span> ]; then
+    <span class="cm"># Case 1: dm-verity device-mapper present → production image</span>
+    <span class="cm"># Detect A/B boot slot and mount the correct slot's partitions</span>
+    boot_slot=$(abctl --boot_slot 2&gt;/dev/null | cut -c 1-2)  <span class="cm"># → "_a" or "_b"</span>
+
+    <span class="cm"># Mount system partition (verity-mapped or raw device)</span>
+    <span class="kw">if</span> [ -e <span class="st">"/dev/mapper/system-verity"</span> ]; then
+        mount /dev/mapper/system-verity ${LXC_ROOTFS_PATH}
+    <span class="kw">else</span>
+        mount /dev/device-mapper/system${boot_slot} ${LXC_ROOTFS_PATH}
+    <span class="kw">fi</span>
+
+    <span class="cm"># Same pattern for vendor, system_ext, system_dlkm, vendor_dlkm, product...</span>
+    mount /dev/mapper/system_ext-verity ${LXC_ROOTFS_PATH}/system_ext
+    <span class="cm"># ...etc</span>
+
+<span class="kw">elif</span> [ -h <span class="st">"/dev/disk/by-partlabel/la_system"</span> ]; then
+    <span class="cm"># Case 2: non-verity GPT label layout (older/dev images)</span>
+    mount /dev/disk/by-partlabel/la_system ${LXC_ROOTFS_PATH}
+    mount /dev/disk/by-partlabel/la_vendor ${LXC_ROOTFS_PATH}/vendor
+<span class="kw">fi</span>
+
+<span class="cm"># Mount OverlayFS → system_ext becomes writable through /data/overlay</span>
+mount -t overlay -o \
+    lowerdir=${LXC_ROOTFS_PATH}/system_ext,\
+    upperdir=/data/overlay/system_ext/upper,\
+    workdir=/data/overlay/system_ext/workdir,\
+    userxattr,override_creds=off \
+    overlay ${LXC_ROOTFS_PATH}/system_ext
+
+mount -t overlay -o \
+    lowerdir=${LXC_ROOTFS_PATH}/system,\
+    upperdir=/data/overlay/system/upper,\
+    workdir=/data/overlay/system/workdir,\
+    userxattr,override_creds=off \
+    overlay ${LXC_ROOTFS_PATH}/system
+
+<span class="cm"># Shared binds: camera socket, firmware, bluetooth, DSP, VHAL, factory</span>
+mount --bind -rw /dev/vhal  ${LXC_ROOTFS_PATH}/vendor/var/vhal
+mount --bind   /factory     ${LXC_ROOTFS_PATH}/vendor/var/factory
+mount --bind -r /firmware   ${LXC_ROOTFS_PATH}/vendor/firmware_mnt
+mount --bind -r /bluetooth  ${LXC_ROOTFS_PATH}/vendor/bt_firmware
+mount --bind -r /dsp        ${LXC_ROOTFS_PATH}/vendor/dsp
+mount --bind -rw /tmp       ${LXC_ROOTFS_PATH}/vendor/var/socket/camera</code></pre>
+    </div>
+
+    <div class="callout tip">
+      <i class="fas fa-lightbulb"></i>
+      <p>The <code>userxattr</code> and <code>override_creds=off</code> overlay options are critical for Android: they allow the Android container (running as root inside its namespace) to set SELinux xattrs on files in the overlay upper layer, even though the overlay itself is mounted on the Linux host side without full Android credentials.</p>
+    </div>
+  </section>
+
+  <!-- 6 adb-setup -->
+  <section class="detail-section" id="step3">
+    <h2>6. Step 3 — <code>adb-setup.bat</code>: USB &amp; Network Init</h2>
+    <p>After rebooting with the new pre-mount configuration, <code>adb-setup.bat</code> pushes the USB init RC file and network script that enable ADB routing into the Android container. It also disables the Linux host's competing <code>usb.service</code>.</p>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">setup/adb-setup.bat</span>
+      </div>
+      <pre><code>adb wait-for-device
+adb root
+adb shell <span class="st">"setenforce 0"</span>
+adb shell <span class="st">"mount -o remount,rw /"</span>
+
+<span class="cm">REM Push custom USB init RC into the container's vendor overlay</span>
+<span class="cm">REM This configures the USB gadget mode so Android's adbd starts correctly</span>
+adb push F:\01.env\05.gvm\src\init.qcom.usb.rc \
+         /etc/lxc/overlay/android1/vendor/etc/init/hw/
+adb shell <span class="st">"chmod 644 /etc/lxc/overlay/android1/vendor/etc/init/hw/init.qcom.usb.rc"</span>
+
+<span class="cm">REM Push the network init script (brings up reth0/reth1 bridge interfaces)</span>
+adb push F:\01.env\05.gvm\src\init.qti.container.network.sh \
+         /etc/lxc/overlay/android1/vendor/bin/
+adb shell <span class="st">"chmod 755 /etc/lxc/overlay/android1/vendor/bin/init.qti.container.network.sh"</span>
+
+<span class="cm">REM Sync the Android container's filesystem</span>
+adb shell <span class="st">"lxc-attach android1 -- sync"</span>
+
+<span class="cm">REM Mask the Linux host USB service so it doesn't compete with Android's adbd</span>
+adb shell <span class="st">"systemctl mask usb.service"</span>
+adb shell <span class="st">"sync"</span></code></pre>
+    </div>
+
+    <h3>What each push achieves</h3>
+    <table>
+      <thead><tr><th>File pushed</th><th>Destination</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>init.qcom.usb.rc</code></td>
+          <td><code>/etc/lxc/overlay/android1/vendor/etc/init/hw/</code></td>
+          <td>Android init reads this RC file and configures the USB gadget driver to expose the ADB interface. Without it, the USB device presents no ADB function.</td>
+        </tr>
+        <tr>
+          <td><code>init.qti.container.network.sh</code></td>
+          <td><code>/etc/lxc/overlay/android1/vendor/bin/</code></td>
+          <td>Brings up <code>reth0</code>/<code>reth1</code> virtual Ethernet interfaces that bridge the Android container to the Linux host network — enabling ADB-over-TCP fallback and network access.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout info">
+      <i class="fas fa-info-circle"></i>
+      <p>Files pushed to <code>/etc/lxc/overlay/android1/vendor/...</code> land in the <strong>vendor overlay</strong> — a separate OverlayFS layer above the raw vendor partition. This means the pushed files survive reboots and don't require reflashing but also don't touch the factory image.</p>
+    </div>
+  </section>
+
+  <!-- 7 Workflow -->
+  <section class="detail-section" id="workflow">
+    <h2>7. Daily Developer Workflow</h2>
+
+    <div class="flow">
+      <div class="flow-step">
+        <div class="flow-dot">①</div>
+        <div class="flow-content">
+          <strong>First time after image flash only: Disable verity</strong>
+          <span>Run <code>verity.bat</code> → reboot device.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">②</div>
+        <div class="flow-content">
+          <strong>First time after image flash only: Configure mounts</strong>
+          <span>Run <code>mount.bat</code> — sets up OverlayFS directories, pushes pre-mount.sh and LXC config → reboot device.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">③</div>
+        <div class="flow-content">
+          <strong>First time after image flash only: Enable ADB</strong>
+          <span>Run <code>adb-setup.bat</code> — pushes USB RC and network script → reboot.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">④</div>
+        <div class="flow-content">
+          <strong>Everyday: Install APK</strong>
+          <span>Build APK with Gradle → run <code>install-gvm-systemui.bat</code> which pushes APK and restarts SystemUI.</span>
+        </div>
+      </div>
+      <div class="flow-step">
+        <div class="flow-dot">⑤</div>
+        <div class="flow-content">
+          <strong>If ADB USB connection drops</strong>
+          <span>Run <code>adb-interface.bat</code> → invokes <code>enable_adb.ps1</code> to re-enable the Windows USB PnP device.</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Install script</h3>
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">Batch</span>
+        <span class="code-file">install/install-gvm-systemui.bat</span>
+      </div>
+      <pre><code>adb wait-for-device
+<span class="cm">REM Kill the running SystemUI process inside the Android container</span>
+adb shell <span class="st">"killall com.android.systemui"</span>
+<span class="cm">REM Restart SystemUI on both displays (FPI + RSI)</span>
+adb shell <span class="st">"am start-service com.android.systemui/.SystemUIService"</span>
+adb shell <span class="st">"am start-service com.android.systemui/.SystemUIService --display 1"</span></code></pre>
+    </div>
+  </section>
+
+  <!-- 8 helper scripts -->
+  <section class="detail-section" id="helper-scripts">
+    <h2>8. Helper Scripts</h2>
+    <table>
+      <thead><tr><th>Script</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>remount.bat</code></td><td>After reboot, remounts <code>/system</code> and <code>/system_ext</code> as rw without redoing the full OverlayFS setup. Used for quick re-push sessions.</td></tr>
+        <tr><td><code>network.bat</code></td><td>Flushes iptables rules and bounces <code>reth0</code>/<code>reth1</code> interfaces when network connectivity is lost between the Android container and Linux host.</td></tr>
+        <tr><td><code>fpi.bat</code> / <code>rsi.bat</code></td><td>Switches display resolution — <code>wm size 2560x1080</code> for FPI, <code>1920x1080</code> for RSI — to simulate different vehicle display configurations.</td></tr>
+        <tr><td><code>adb-interface.bat</code></td><td>Invokes <code>enable_adb.ps1</code> to re-enable the Windows ADB USB device via PnP API when it gets disabled by Windows power management.</td></tr>
+        <tr><td><code>mount-my24.bat</code></td><td>Variant of <code>mount.bat</code> for MY2024 image — uses <code>pre-mount-24.sh</code> and <code>myconfig24</code> with additional <code>lxc-stop/start</code> cycle.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="code-block">
+      <div class="code-header">
+        <span class="code-lang">PowerShell</span>
+        <span class="code-file">enable_adb.ps1</span>
+      </div>
+      <pre><code><span class="cm"># Re-enables Windows ADB USB device that got Error/Disabled by power management</span>
+<span class="kw">$deviceName</span> = <span class="st">"Android Composite ADB Interface"</span>
+<span class="kw">$devices</span> = Get-PnpDevice | Where-Object { <span class="kw">$_</span>.FriendlyName -like <span class="st">"*$deviceName*"</span> }
+
+<span class="kw">foreach</span> (<span class="kw">$dev</span> in <span class="kw">$devices</span>) {
+    <span class="kw">if</span> (<span class="kw">$dev</span>.Status -eq <span class="st">"Error"</span> -or <span class="kw">$dev</span>.Status -eq <span class="st">"Disabled"</span>) {
+        Enable-PnpDevice -InstanceId <span class="kw">$dev</span>.InstanceId -Confirm:<span class="kw">$false</span>
+    }
+}</code></pre>
+    </div>
+  </section>
+
+  <!-- 9 Why -->
+  <section class="detail-section" id="why">
+    <h2>9. Why This Approach?</h2>
+    <div class="why-box">
+      <div class="why-label"><i class="fas fa-lightbulb"></i> Design Rationale</div>
+      <p>The alternative to this setup is reflashing the entire system image for every code change — a process that takes 10–20 minutes on the Qualcomm SA8155 flasher. With OverlayFS + ADB, a code change can be pushed and tested in <strong>under 20 seconds</strong>: <code>adb push</code> + <code>killall com.android.systemui</code>. The OverlayFS approach is superior to a simple <code>adb remount</code> + direct write because it requires no changes to the raw flash partitions — the device stays in a known-good factory state, and all developer changes exist only in the <code>/data/overlay</code> layer, which can be wiped cleanly by deleting those directories. The pre-mount.sh mechanism is the standard LXC hook point on this platform — injecting OverlayFS into it means the writable mounts are active every time the container starts, even after a reboot, without any manual intervention.</p>
+    </div>
+    <div class="card-grid">
+      <div class="card">
+        <h4>No reflash needed</h4>
+        <p>Push and test any APK or framework file in seconds. Device stays on factory image baseline.</p>
+      </div>
+      <div class="card">
+        <h4>Persistent changes</h4>
+        <p>OverlayFS upper layer is on <code>/data</code> — survives reboots. No repeat setup after power cycle.</p>
+      </div>
+      <div class="card">
+        <h4>Clean rollback</h4>
+        <p>Delete <code>/data/overlay/system/upper</code> → device reverts to factory state. Zero risk to base image.</p>
+      </div>
+      <div class="card">
+        <h4>Multi-display testing</h4>
+        <p><code>fpi.bat</code> / <code>rsi.bat</code> switch display resolution to test all 3 screen configurations without physical hardware swap.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+</body>
+</html>

@@ -174,20 +174,20 @@
                         Inherited and extended AOSP SystemUI for the GM automotive project:
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li>Rebuilt layout to support multiple themes, vehicle models, and screen sizes.</li>
-                        <li>Created a new <strong>QuickControl</strong> floating panel using WindowManager for quick system settings.</li>
-                        <li>Modified <strong>PowerManagerService</strong> to support Minimal Mode and Burn-in protection popups.</li>
-                        <li>Updated <strong>com.android.internal.policy</strong> to block app content from rendering beneath the Navigation Bar.</li>
-                        <li>Enabled background blur via <code>ro.surface_flinger.supports_background_blur=1</code>.</li>
-                        <li>Unit Testing with JUnit 4 and Mockito-Kotlin.</li>
+                        <li><a href="Experience/GvmSystemUI/01-multi-theme-screen.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Rebuilt layout to support multiple themes, vehicle models, and screen sizes.</li>
+                        <li><a href="Experience/GvmSystemUI/02-quick-control-panel.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Created a new <strong>QuickControl</strong> floating panel using WindowManager for quick system settings.</li>
+                        <li><a href="Experience/GvmSystemUI/03-powermanager-minimal-burnin.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Modified <strong>PowerManagerService</strong> to support Minimal Mode and Burn-in protection popups.</li>
+                        <li><a href="Experience/GvmSystemUI/04-navbar-inset-blocking.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Updated <strong>com.android.internal.policy</strong> to block app content from rendering beneath the Navigation Bar.</li>
+                        <li><a href="Experience/GvmSystemUI/05-background-blur.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Enabled background blur via <code>ro.surface_flinger.supports_background_blur=1</code>.</li>
+                        <li><a href="Experience/GvmSystemUI/06-unit-testing.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Unit Testing with JUnit 4 and Mockito-Kotlin.</li>
                     </ul>
                     <p class="experience-description">
                         <strong>2. Improving Project Developer Environment</strong>
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li>Configured ADB setup directly into Android containers with mountable system/system_ext partitions.</li>
-                        <li>Set up Python scripts to sync source code to the build server with automated download and installation.</li>
-                        <li>Configured Gradle build for SystemUI to streamline the build and testing workflow.</li>
+                        <li><a href="Experience/GvmSystemUI/08-adb-container-setup.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured ADB setup directly into Android containers with mountable system/system_ext partitions.</li>
+                        <li><a href="Experience/GvmSystemUI/09-python-build-sync.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Set up Python scripts to sync source code to the build server with automated download and installation.</li>
+                        <li><a href="Experience/GvmSystemUI/07-gradle-build.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured Gradle build for SystemUI to streamline the build and testing workflow.</li>
                     </ul>
                     <p class="experience-description">
                         <strong>3. Technical support:</strong> Manual HMI, QIBLA HMI, Settings HMI, Vehicle Information, LgeUiLib, Talkback service, Keyboards.
@@ -224,10 +224,10 @@
                         A dual-layer framework bridging Android (container) and WebOS (container) via an LCP Bus:
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li><strong>HMI Layer:</strong> Jetpack Compose-based Android Launcher rendered transparently over WebOS, using AIDL Binder for service communication with System UID privileges and a Public API for third-party integration.</li>
-                        <li><strong>Projection Service:</strong> Central broker using Proxy/Manager patterns with Coroutine-based auto-reconnection.</li>
-                        <li><strong>System Service:</strong> JNI Gateway bridging Android to the WebOS native LCP bus.</li>
-                        <li><strong>Data &amp; IPC:</strong> Standardized on AIDL across all layers with JSON polymorphic deserialization.</li>
+                        <li><a href="Experience/WebosProjection/01-hmi-layer.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>HMI Layer:</strong> Jetpack Compose-based Android Launcher rendered transparently over WebOS, using AIDL Binder for service communication with System UID privileges and a Public API for third-party integration.</li>
+                        <li><a href="Experience/WebosProjection/02-projection-service.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>Projection Service:</strong> Central broker using Proxy/Manager patterns with Coroutine-based auto-reconnection.</li>
+                        <li><a href="Experience/WebosProjection/03-system-service.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>System Service:</strong> JNI Gateway bridging Android to the WebOS native LCP bus.</li>
+                        <li><a href="Experience/WebosProjection/04-data-ipc.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>Data &amp; IPC:</strong> Standardized on AIDL across all layers with JSON polymorphic deserialization.</li>
                     </ul>
                     <p class="experience-description">
                         <strong>2. Technical support:</strong> ECall HMI/Service, Manual HMI, QIBLA HMI.
@@ -268,8 +268,8 @@
                         Feature on Demand — handling applicability checks, execution validation, and state persistence for vehicle software features delivered via OCM (Off-board Communication Manager).
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li>State-machine driven execution pipeline ensuring ordered, resumable processing of FOD lifecycle events across reboots.</li>
-                        <li>Configured SEPolicy: dedicated <code>nissan_fod_file</code> label with rw access for <code>alliancecarservice_app</code> only.</li>
+                        <li><a href="Experience/FodService/01-state-machine-pipeline.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> State-machine driven execution pipeline ensuring ordered, resumable processing of FOD lifecycle events across reboots.</li>
+                        <li><a href="Experience/FodService/02-sepolicy.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured SEPolicy: dedicated <code>nissan_fod_file</code> label with rw access for <code>alliancecarservice_app</code> only.</li>
                     </ul>
                     <p class="experience-description">
                         <strong>3. Technical support:</strong> Unit Service, User Profile Service.<br>
@@ -307,8 +307,8 @@
                         An application in the car that allows users to listen to online media content like Spotify, TuneIn, Deezer, Kuwo, Alexa, and Tmall Genie.
                     </p>
                     <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
-                        <li>Improved app performance through caching implementation.</li>
-                        <li>Enhanced UX with dynamic background colors based on album artwork.</li>
+                        <li><a href="Experience/PIVI/01-caching.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Improved app performance through caching implementation.</li>
+                        <li><a href="Experience/PIVI/02-dynamic-background-color.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Enhanced UX with dynamic background colors based on album artwork.</li>
                     </ul>
                     <p class="experience-description">
                         <strong>2. Cluster Service – Service Layer [Maintenance &amp; Enhancement]</strong><br>

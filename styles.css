@@ -479,6 +479,32 @@ section {
     font-weight: 500;
 }
 
+/* Detail page link — inline "→ Details" links in experience bullets */
+.detail-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    text-decoration: none;
+    border: 1px solid rgba(108, 99, 255, 0.4);
+    background: rgba(108, 99, 255, 0.08);
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    margin-right: 0.4rem;
+    vertical-align: middle;
+    transition: background 0.2s, color 0.2s;
+    white-space: nowrap;
+}
+.detail-link:hover {
+    background: var(--primary-color);
+    color: #fff;
+}
+.detail-link i {
+    font-size: 0.7rem;
+}
+
 /* Certificates Section */
 .certificates {
     background: var(--bg-secondary);

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>State-Machine Pipeline | FoD Service – AIVI Nissan & Renault</title>
+  <link rel="stylesheet" href="../GvmSystemUI/detail-style.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+<nav class="back-bar">
+  <a href="../../index.html#experience"><i class="fas fa-arrow-left"></i> Back to Portfolio</a>
+  <span class="breadcrumb">FoD Service – AIVI / <span>State-Machine Pipeline</span></span>
+</nav>
+
+<header class="detail-hero">
+  <div class="category-badge">Service Architecture</div>
+  <h1>State-Machine Driven Execution Pipeline<br>for FoD (Feature on Demand)</h1>
+  <p class="subtitle">
+    How a formal state machine enforces ordered, resumable processing of Feature-on-Demand lifecycle
+    events — surviving reboots, detecting stale states, and protecting the vehicle ECU from race conditions
+    and concurrent requests.
+  </p>
+  <div class="tags">
+    <span>State Machine</span><span>Android Automotive OS</span><span>AIDL / Binder</span>
+    <span>Persistence</span><span>OCM</span><span>ASPICE SDD</span>
+  </div>
+</header>
+
+<main class="detail-main">
+
+  <nav class="toc">
+    <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
+    <ol>
+      <li><a href="#context">What is FoD and Why It Matters</a></li>
+      <li><a href="#challenge">The Engineering Challenge</a></li>
+      <li><a href="#states">The Seven States</a></li>
+      <li><a href="#pattern">State Pattern Implementation</a></li>
+      <li><a href="#persistence">State Persistence Across Reboots</a></li>
+      <li><a href="#recovery">Boot-Time Recovery Logic</a></li>
+      <li><a href="#timeout">20-Minute Safety Timeout</a></li>
+      <li><a href="#execution-flow">Full Execution Flow (Step by Step)</a></li>
+      <li><a href="#why">Why These Design Choices?</a></li>
+    </ol>
+  </nav>
+
+  <!-- 1. Context -->
+  <section class="detail-section" id="context">
+    <h2>1. What is FoD and Why It Matters</h2>
+    <p>
+      <strong>Feature on Demand (FoD)</strong> is a vehicle-software mechanism that lets the OEM (Nissan/Renault)
+      deliver, activate, or reconfigure vehicle software features <em>over-the-air</em> — without a full ECU
+      reflash. Examples include enabling heated seats, unlocking adaptive cruise-control, or changing
+      driving-mode behaviour on demand.
+    </p>
+    <p style="margin-top:1rem;">
+      The Android Automotive service (<code>AllianceCarFodService</code>) is the <strong>ECU-side broker</strong>:
+      it receives execution requests from the <strong>OCM (Off-board Communication Manager)</strong> — the
+      cloud/OTA layer — validates them, persists parameter changes, and forwards results back to the OCM and
+      to any registered HMI listener.
+    </p>
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-cloud-download-alt" style="color:var(--accent)"></i> &nbsp;OCM (Cloud Side)</h4>
+        <p>Off-board Communication Manager — triggers FoD activation requests, sends FodId + parameters.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-cogs" style="color:var(--accent)"></i> &nbsp;AllianceCarFodService</h4>
+        <p>Android Automotive plug-in service. Validates, persists, and executes feature parameter changes.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-car" style="color:var(--accent)"></i> &nbsp;HMI / ECU Listeners</h4>
+        <p>HVAC, Seat, and other services that register as <code>IFodEventListener</code> via AIDL Binder.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. Challenge -->
+  <section class="detail-section" id="challenge">
+    <h2>2. The Engineering Challenge</h2>
+    <p>
+      A naïve implementation — just writing new parameters directly when the OCM requests it — fails in
+      several real-world scenarios that automotive software must handle:
+    </p>
+    <ul style="margin:1rem 0 1rem 2rem; line-height:2.2;">
+      <li><strong>Reboot in the middle of execution</strong> — the ECU can lose power at any time. Without
+        persisted state, the FoD process restarts from scratch, potentially leaving the vehicle feature
+        in a half-applied state.</li>
+      <li><strong>Concurrent requests</strong> — OCM may send a second activation while the first is still
+        being processed by the downstream HVAC/Seat service. Without a guard, both get applied simultaneously.</li>
+      <li><strong>Stuck execution</strong> — if the downstream listener crashes and never calls back, the
+        broker would be locked forever, refusing all further FoD operations.</li>
+      <li><strong>Out-of-order responses</strong> — the result callback from listener must be matched
+        to the originating request, not just accepted blindly.</li>
+    </ul>
+    <p>A <strong>state machine</strong> solves all four problems with a single, provable model.</p>
+  </section>
+
+  <!-- 3. States -->
+  <section class="detail-section" id="states">
+    <h2>3. The Seven States</h2>
+    <p>
+      Defined in <code>FodConstant.java</code>, the lifecycle uses numeric IDs that are persisted to disk:
+    </p>
+    <div class="card-grid" style="margin-top:1rem;">
+      <div class="card">
+        <h4 style="color:#6c63ff;">[1] IdleState</h4>
+        <p>Ready to accept any new request. Default state on a clean boot.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[2] ReadyForExecutionState</h4>
+        <p>OCM has sent a "prepare" signal. Service waits for the actual execution payload.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[3] StartExecutionState</h4>
+        <p>Validation in progress. Parameters are being checked against the database.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[4] ExecutionInProgressState</h4>
+        <p>Validated params dispatched to downstream listeners. Awaiting ACK from HVAC/Seat.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[5] FinishExecutionState</h4>
+        <p>Execution result ready. Waits for OCM to call changeState(IDLE) before resetting.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[51] ReadFodApplicabilityState</h4>
+        <p>Reading current feature availability from database for applicability upload.</p>
+      </div>
+      <div class="card">
+        <h4 style="color:#6c63ff;">[52] FinishFodApplicabilityState</h4>
+        <p>Applicability data ready to return to OCM. Awaiting acknowledgement.</p>
+      </div>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      Any state that is not <strong>[1] Idle</strong> rejects new execution requests with
+      <code>ECU_BUSY (8301)</code>, ensuring serialised processing. The state IDs intentionally
+      match the numeric codes defined in the ASPICE SRS document so that test engineers could verify
+      state transitions at the protocol level.
+    </p>
+  </section>
+
+  <!-- 4. State Pattern -->
+  <section class="detail-section" id="pattern">
+    <h2>4. State Pattern Implementation</h2>
+    <p>
+      The implementation uses the classic <strong>GoF State Pattern</strong>: an abstract base class
+      <code>FodState</code> declares the contract, and each concrete state encapsulates only the behaviour
+      valid in that state.
+    </p>
+
+    <pre><code>// FodState.java — abstract base (simplified)
+public abstract class FodState {
+
+    protected FodClient fodClient;
+    protected Handler   fodStateHandler;
+
+    public abstract FodApplicabilityData requestApplicabilityUpload();
+    public abstract int                  requestReadState();
+    public abstract int                  requestChangeState(int targetState);
+    public abstract FodExecutionResultData requestStartExecution(FodExecutionData data);
+    public abstract FodParameterData     requestCheckParameter(long fodId);
+
+    // Shared: arm a 20-min watchdog to reset back to Idle
+    public void startTimeoutBackToIdle() {
+        fodStateHandler.removeCallbacksAndMessages(null);
+        fodStateHandler.postDelayed(() -> {
+            fodClient.setCurrentState(fodClient.getFodStateInstance(IDLE_STATE));
+            saveCurrentStateToDatabase(IDLE_STATE);
+        }, DELAY_BACK_TO_IDLE_STATE_TIME_OUT); // 20 mins
+    }
+
+    protected void saveCurrentStateToDatabase(int stateId) {
+        fodClient.saveCurrentStateToDatabase(stateId);
+    }
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      <code>FodClient</code> holds a reference to the <em>current</em> state object and delegates every
+      incoming call to it. Transitioning states is simply swapping that reference:
+    </p>
+
+    <pre><code>// Inside ReadyForExecutionState.requestStartExecution()
+// Step 1 — transition to StartExecution
+fodClient.setCurrentState(fodClient.getFodStateInstance(START_EXECUTION_STATE));
+saveCurrentStateToDatabase(START_EXECUTION_STATE);
+startTimeoutBackToIdle();
+
+// Step 2 — validate execution data
+FodExecutionResultData result =
+    fodClient.getFodExecutionManager().requestCheckExecutionData(executionData);
+
+// Step 3 — if validation OK, notify listeners; else jump to Finish
+if (result.getResultCode() == INTERNAL_READY_FOR_UPDATE) {
+    fodClient.dispatchedParamChanged(mergedFoDExecutionData);   // → [4]
+} else {
+    fodClient.setCurrentState(getFodStateInstance(FINISH_EXECUTION_STATE)); // → [5]
+    saveCurrentStateToDatabase(FINISH_EXECUTION_STATE);
+    startTimeoutBackToIdle();
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      Because every state object knows which transitions are legal and simply ignores or returns
+      <code>ECU_BUSY</code> for all others, no <code>if/else</code> chain is needed in the service
+      layer — the correct behaviour is encoded in the type.
+    </p>
+  </section>
+
+  <!-- 5. Persistence -->
+  <section class="detail-section" id="persistence">
+    <h2>5. State Persistence Across Reboots</h2>
+    <p>
+      The current state integer is written to a plain text file on the <strong>persist partition</strong>
+      after <em>every</em> transition. The file path is:
+    </p>
+    <pre><code>/mnt/product/persist-alliance/fod/fod_state</code></pre>
+
+    <p style="margin-top:1rem;">
+      The write uses <code>FileDescriptor.sync()</code> to force the kernel page cache to disk
+      before the method returns — guaranteeing the value is durable even if power is cut a millisecond later:
+    </p>
+
+    <pre><code>// FodStateDatabaseManager.java
+private synchronized void writeDataToFile() {
+    FileOutputStream fos = new FileOutputStream(mFileName);
+    FileDescriptor   fd  = fos.getFD();
+
+    fos.write(String.valueOf(mCurrentState).getBytes(StandardCharsets.UTF_8));
+    fos.write(System.lineSeparator().getBytes(StandardCharsets.UTF_8));
+    fos.flush();
+    fd.sync();   // ← fsync: data guaranteed on non-volatile storage
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      The FoD <em>parameter database</em> (<code>fod_data</code>) uses the same pattern:
+      every parameter update calls <code>fd.sync()</code> to ensure the approved vehicle-feature
+      configuration survives a reboot.
+    </p>
+
+    <div class="card-grid" style="margin-top:1.5rem;">
+      <div class="card">
+        <h4><i class="fas fa-file-alt" style="color:var(--accent)"></i> &nbsp;fod_state</h4>
+        <p>A single integer: the current state ID (1–52). Read on every boot to resume the pipeline.</p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-database" style="color:var(--accent)"></i> &nbsp;fod_data</h4>
+        <p>
+          One line per FodId: <code>FodId SAFlag SubId-Param_SubId-Param</code>.
+          Synced to disk after every successful execution.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. Boot Recovery -->
+  <section class="detail-section" id="recovery">
+    <h2>6. Boot-Time Recovery Logic</h2>
+    <p>
+      When <code>FodStateDatabaseManager</code> initialises (singleton, created at service start),
+      it reads the persisted state and applies deterministic recovery rules:
+    </p>
+
+    <pre><code>// FodStateDatabaseManager constructor
+private FodStateDatabaseManager() {
+    getDataFromFile(mFileName);   // read last state from disk
+
+    if (mCurrentState == 0) {
+        // First boot ever — file was empty
+        mCurrentState = IDLE_STATE;
+        writeDataToFile();
+    } else if (mCurrentState == READ_FOD_APPLICABILITY_STATE) {  // 51
+        // Rebooted while reading applicability → safe to retry from Idle
+        mCurrentState = IDLE_STATE;
+        writeDataToFile();
+    } else if (mCurrentState == FINISH_FOD_APPLICABILITY_STATE) { // 52
+        // Rebooted after applicability was ready but before OCM acked → reset
+        mCurrentState = IDLE_STATE;
+        writeDataToFile();
+    }
+    // States 2–5 (execution pipeline) are left as-is
+    // so FodClient can decide whether to resume or reset via FodState logic
+}</code></pre>
+
+    <p style="margin-top:1rem;">
+      The key insight: <strong>applicability states (51, 52) are always safe to reset to Idle</strong>
+      because they are read-only queries — re-running them on the next boot has no side effect.
+      Execution states (2–5) are preserved so the higher-level <code>FodClient</code> can decide
+      whether to resume (e.g. re-dispatch to listeners that reconnected) or fail cleanly.
+    </p>
+  </section>
+
+  <!-- 7. Timeout -->
+  <section class="detail-section" id="timeout">
+    <h2>7. 20-Minute Safety Timeout</h2>
+    <p>
+      Every non-Idle state arms a 20-minute <code>Handler.postDelayed()</code> watchdog via
+      <code>startTimeoutBackToIdle()</code>. If the pipeline does not complete (e.g. a downstream
+      service crashes and never ACKs), the watchdog fires and resets to <strong>IdleState</strong>,
+      persisting state <code>1</code> to disk.
+    </p>
+    <pre><code>// FodConstant.java
+public static final long DELAY_BACK_TO_IDLE_STATE_TIME_OUT = 20 * 60 * 1000L; // 20 minutes
+
+// FodState.java
+public void startTimeoutBackToIdle() {
+    fodStateHandler.removeCallbacksAndMessages(null); // cancel previous timer
+    fodStateHandler.postDelayed(() -> {
+        fodClient.setCurrentState(fodClient.getFodStateInstance(IDLE_STATE));
+        saveCurrentStateToDatabase(IDLE_STATE);
+    }, DELAY_BACK_TO_IDLE_STATE_TIME_OUT);
+}</code></pre>
+    <p style="margin-top:1rem;">
+      The timer is <em>rearmed</em> on every transition — not just the first — so a legitimate
+      long-running execution (e.g. multiple listener round-trips) gets the full 20 minutes from each step.
+      <code>removeCallbacksAndMessages(null)</code> ensures only one timer is active at any time.
+    </p>
+  </section>
+
+  <!-- 8. Full Flow -->
+  <section class="detail-section" id="execution-flow">
+    <h2>8. Full Execution Flow (Step by Step)</h2>
+    <p>A complete FoD activation from OCM to persistence:</p>
+
+    <div style="overflow-x:auto; margin-top:1rem;">
+      <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+        <thead>
+          <tr style="background:var(--bg-code); color:var(--text-heading);">
+            <th style="padding:0.75rem 1rem; text-align:left; border-bottom:1px solid var(--border);">#</th>
+            <th style="padding:0.75rem 1rem; text-align:left; border-bottom:1px solid var(--border);">Caller → Action</th>
+            <th style="padding:0.75rem 1rem; text-align:left; border-bottom:1px solid var(--border);">State Before</th>
+            <th style="padding:0.75rem 1rem; text-align:left; border-bottom:1px solid var(--border);">State After</th>
+            <th style="padding:0.75rem 1rem; text-align:left; border-bottom:1px solid var(--border);">Persisted?</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td style="padding:0.6rem 1rem;">1</td><td>OCM → <code>requestChangeState(2)</code></td><td>[1] Idle</td><td>[2] ReadyForExecution</td><td>✅ disk</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;">2</td><td>OCM → <code>requestStartExecution(data)</code></td><td>[2] Ready</td><td>[3] StartExecution</td><td>✅ disk</td></tr>
+          <tr><td style="padding:0.6rem 1rem;">3</td><td>Internal → <code>FodExecutionManager.checkExecution()</code></td><td>[3] Start</td><td>[3] Start (validating)</td><td>—</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;">4a</td><td>Validation OK → dispatch to listeners</td><td>[3] Start</td><td>[4] InProgress</td><td>✅ disk</td></tr>
+          <tr><td style="padding:0.6rem 1rem;">4b</td><td>Validation FAIL → skip to Finish</td><td>[3] Start</td><td>[5] Finish</td><td>✅ disk</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;">5</td><td>Listener ACK → <code>responseChangedSettingParamResult()</code></td><td>[4] InProgress</td><td>[4] InProgress (counting ACKs)</td><td>—</td></tr>
+          <tr><td style="padding:0.6rem 1rem;">6</td><td>All ACKs received → <code>FodStorage.updateFodParam()</code></td><td>[4] InProgress</td><td>[5] Finish</td><td>✅ disk (params + state)</td></tr>
+          <tr style="background:rgba(108,99,255,0.04);"><td style="padding:0.6rem 1rem;">7</td><td>OCM → <code>requestChangeState(1)</code></td><td>[5] Finish</td><td>[1] Idle</td><td>✅ disk</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p style="margin-top:1.5rem;">
+      <strong>Resumability:</strong> If the device reboots between steps 2–6, the persisted state
+      (e.g. <code>3</code>) is restored on the next boot. The OCM, detecting the stale state via
+      <code>requestReadState()</code>, can decide to cancel (call <code>changeState(1)</code>) or
+      re-attempt the execution — both paths are handled cleanly.
+    </p>
+  </section>
+
+  <!-- 9. Why -->
+  <section class="detail-section" id="why">
+    <h2>9. Why These Design Choices?</h2>
+
+    <div class="card-grid">
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why State Pattern (GoF)?</h4>
+        <p>
+          Each state object is independently testable (unit tests cover every state class in the
+          <code>swut</code> folder). Adding a new state requires only a new class — no giant
+          <code>switch</code> in the service. ASPICE SDD documentation maps 1:1 to state classes.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why a Plain Text File Instead of SQLite?</h4>
+        <p>
+          A single integer needs a single line. SQLite adds a 300 KB library, schema migrations,
+          and cursor management overhead for no benefit. The plain file is crash-safe with
+          <code>fd.sync()</code> and trivially auditable in logcat.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why the Persist Partition?</h4>
+        <p>
+          <code>/mnt/product/persist-alliance/fod/</code> survives OTA updates and factory-reset
+          (depending on configuration). Vehicle feature entitlements must outlive software updates —
+          a user who paid for heated seats should not lose the feature after a firmware flash.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why the 20-Min Timeout?</h4>
+        <p>
+          Automotive standards require services to self-heal. A 20-minute window covers legitimate
+          slow executions (e.g. waiting for vehicle ignition cycle) while ensuring the service
+          is never permanently stuck. The timeout value was agreed with the OCM team based on
+          their worst-case round-trip spec.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Serialize All State Writes?</h4>
+        <p>
+          <code>FodStateDatabaseManager</code> and <code>FodDatabaseManager</code> are singletons
+          with <code>synchronized</code> file-access methods. The service runs callbacks on a dedicated
+          <code>HandlerThread</code>, ensuring all state transitions are single-threaded and the on-disk
+          file is never corrupted by concurrent writes.
+        </p>
+      </div>
+      <div class="card">
+        <h4><i class="fas fa-check-circle" style="color:var(--accent)"></i> &nbsp;Why Track Individual Listener ACKs?</h4>
+        <p>
+          Multiple AIDL listeners (HVAC + Seat) can be registered for the same FodId. The service
+          issues a unique <code>fodEventId</code> per listener and tracks a <code>HashSet</code> of
+          pending ACKs. Only when all ACKs arrive does it commit the parameter update — preventing
+          partial feature activation.
+        </p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer style="text-align:center; padding:2rem; color:var(--text-muted); font-size:0.85rem; border-top:1px solid var(--border); margin-top:3rem;">
+  FoD Service — AIVI Project (Nissan &amp; Renault) &nbsp;·&nbsp; LG Electronics &nbsp;·&nbsp; 2023–2024
+</footer>
+
+</body>
+</html>
