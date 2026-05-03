@@ -23,6 +23,7 @@ themeToggle.addEventListener('click', () => {
     html.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
     updateThemeIcon(newTheme);
+    animateVideoForTheme(newTheme);
 });
 
 function updateThemeIcon(theme) {
@@ -34,6 +35,63 @@ function updateThemeIcon(theme) {
         themeIcon.classList.add('fa-moon');
     }
 }
+
+// ── Profile Video Theme Animation ──────────────────────────────────────────
+const profileVideo = document.getElementById('profileVideo');
+const profileVideoReverse = document.getElementById('profileVideoReverse');
+let _playPromise = null;
+
+function animateVideoForTheme(newTheme) {
+    if (!profileVideo || !profileVideoReverse) return;
+
+    if (newTheme === 'dark') {
+        // Light → Dark: play video.mp4 forward
+        profileVideoReverse.pause();
+        profileVideoReverse.style.display = 'none';
+        profileVideo.style.display = 'block';
+        profileVideo.currentTime = 0;
+        profileVideo.playbackRate = 1.5;
+        _playPromise = profileVideo.play();
+        if (_playPromise) _playPromise.catch(() => {});
+        profileVideo.addEventListener('ended', () => profileVideo.pause(), { once: true });
+    } else {
+        // Dark → Light: play video_reverse.mp4 forward
+        profileVideo.pause();
+        profileVideo.style.display = 'none';
+        profileVideoReverse.style.display = 'block';
+        profileVideoReverse.currentTime = 0;
+        profileVideoReverse.playbackRate = 1.5;
+        _playPromise = profileVideoReverse.play();
+        if (_playPromise) _playPromise.catch(() => {});
+        profileVideoReverse.addEventListener('ended', () => profileVideoReverse.pause(), { once: true });
+    }
+}
+
+function initVideoForTheme(theme) {
+    if (!profileVideo || !profileVideoReverse) return;
+    if (theme === 'dark') {
+        profileVideoReverse.style.display = 'none';
+        profileVideo.style.display = 'block';
+        const apply = () => {
+            profileVideo.currentTime = profileVideo.duration;
+            profileVideo.pause();
+        };
+        if (profileVideo.readyState >= 1) apply();
+        else profileVideo.addEventListener('loadedmetadata', apply, { once: true });
+    } else {
+        profileVideoReverse.style.display = 'none';
+        profileVideo.style.display = 'block';
+        const apply = () => {
+            profileVideo.currentTime = 0;
+            profileVideo.pause();
+        };
+        if (profileVideo.readyState >= 1) apply();
+        else profileVideo.addEventListener('loadedmetadata', apply, { once: true });
+    }
+}
+
+initVideoForTheme(currentTheme);
+// ── End Profile Video Theme Animation ──────────────────────────────────────
 
 // Mobile Navigation Toggle
 const hamburger = document.querySelector('.hamburger');
