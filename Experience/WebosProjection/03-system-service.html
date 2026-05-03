@@ -29,11 +29,64 @@
 
 <main class="detail-main">
 
+<style>
+.flow-wrap {
+  display: flex; flex-direction: column; align-items: center;
+  margin: 1.5rem auto; max-width: 680px;
+}
+.flow-node {
+  width: 100%; box-sizing: border-box;
+  background: #1a2535; border: 1.5px solid #4a90d9;
+  border-radius: 8px; padding: 0.7rem 1.2rem; text-align: center;
+}
+.flow-node .fn-title { font-weight: 700; color: #7ab8f5; font-size: 0.95rem; }
+.flow-node .fn-sub   { color: #999; font-size: 0.82rem; margin-top: 0.25rem; line-height: 1.5; }
+.flow-arrow {
+  text-align: center; padding: 3px 0;
+  color: #4a90d9; font-size: 1.3rem; line-height: 1.1;
+}
+.fa-label { display: block; font-size: 0.72rem; color: #888; font-family: sans-serif; }
+.flow-boundary {
+  width: 100%; box-sizing: border-box; border: 2px dashed;
+  border-radius: 10px; padding: 0.7rem 1rem; margin: 3px 0;
+}
+.fb-android { border-color: #4a90d9; }
+.fb-host    { border-color: #e8a020; }
+.fb-webos   { border-color: #44a044; }
+.fb-label   { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem; }
+.fbl-android { color: #4a90d9; }
+.fbl-host    { color: #e8a020; }
+.fbl-webos   { color: #44a044; }
+.two-col-diagram {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0;
+}
+.diag-box {
+  background: #1a2535; border: 1.5px solid #334;
+  border-radius: 8px; padding: 0.8rem 1rem;
+}
+.diag-box h4 { color: #7ab8f5; margin: 0 0 0.5rem; font-size: 0.9rem; }
+.diag-box ul { margin: 0; padding-left: 1.1rem; color: #ccc; font-size: 0.82rem; line-height: 1.8; }
+.seq-table {
+  width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.88rem;
+}
+.seq-table th {
+  background: #1a2535; color: #7ab8f5; text-align: left;
+  padding: 0.5rem 0.8rem; border-bottom: 2px solid #4a90d9;
+}
+.seq-table td {
+  padding: 0.5rem 0.8rem; border-bottom: 1px solid #223;
+  vertical-align: top; color: #ccc;
+}
+.seq-table td:first-child { color: #7ab8f5; font-weight: 600; white-space: nowrap; }
+.seq-table tr:hover td { background: #1e2d40; }
+@media (max-width: 640px) { .two-col-diagram { grid-template-columns: 1fr; } }
+</style>
+
   <nav class="toc">
     <h3><i class="fas fa-list"></i> &nbsp;Contents</h3>
     <ol>
       <li><a href="#context">Why a Separate System Service?</a></li>
-      <li><a href="#architecture">Layer Architecture</a></li>
+      <li><a href="#architecture">Full Stack Architecture</a></li>
       <li><a href="#jni">JNI Gateway: LcpCommunicator</a></li>
       <li><a href="#stub">ContainerCommunicationStub</a></li>
       <li><a href="#managers">System Managers</a></li>
@@ -48,203 +101,330 @@
     <p>
       The LCP (LGE Container Protocol) bus is a <strong>native C++ SDK</strong> provided by the platform team.
       There is no pure-Java/Kotlin binding — only a <code>.so</code> shared library and C++ headers.
-      Because JNI code is tied to a specific process and privilege level, a dedicated service
-      (<code>ContainerCommunicationService</code>, app ID <code>com.lge.car.webossystemservice</code>) was
-      created to:
+      A dedicated service (<code>ContainerCommunicationService</code>, app ID
+      <code>com.lge.car.webossystemservice</code>) was created to:
     </p>
     <ul style="margin-left:1.5rem; margin-top:0.75rem; line-height:2;">
-      <li>Load and own the native <code>projection-lcp</code> library in a single well-controlled process.</li>
-      <li>Expose the LCP bus to other Android processes via a stable AIDL interface — so the projection
-      service and any future client never need to link native code directly.</li>
+      <li>Load and own the native <code>projection-lcp</code> library in a single, well-controlled process.</li>
+      <li>Expose the LCP bus to other Android processes via a stable <strong>AIDL interface</strong> — so the
+      projection service and any future client never need to link native code directly.</li>
       <li>Run with elevated system privileges required by the LCP SDK (reads
-      <code>/etc/update/official_version</code>, uses private WiFi APIs).</li>
+      <code>/etc/update/official_version</code>, uses private LGE WiFi APIs).</li>
     </ul>
   </section>
 
-  <!-- 2. Layer Architecture -->
+  <!-- 2. Architecture -->
   <section class="detail-section" id="architecture">
-    <h2>2. Layer Architecture</h2>
-    <p>The system module has three clean horizontal layers:</p>
+    <h2>2. Full Stack Architecture</h2>
+    <p>
+      Three horizontal layers inside the system service process, bridging across
+      two container boundaries to reach the WebOS side via a Unix Domain Socket.
+    </p>
 
-    <div class="card-grid">
-      <div class="card" style="border-left:3px solid var(--accent);">
-        <h4>① AIDL Boundary Layer</h4>
-        <p><code>ContainerCommunicationStub</code> — implements <code>IContainerCommunicationInterface.Stub</code>,
-        the public AIDL interface that external clients (projection service) call.</p>
+    <div class="flow-wrap">
+      <div class="flow-node" style="border-color:#888; background:#141e2b;">
+        <div class="fn-title">Projection Service Process (separate APK)</div>
+        <div class="fn-sub">WospSystemProxy — calls over AIDL Binder IPC</div>
       </div>
-      <div class="card" style="border-left:3px solid var(--accent);">
-        <h4>② Kotlin Orchestration Layer</h4>
-        <p><code>Communicator</code> singleton + <code>LcpCommunicator</code> — route messages between
-        AIDL callers and the native library. Manage multi-CID routing and callback registration.</p>
+      <div class="flow-arrow">↕ <span class="fa-label">Binder IPC — IContainerCommunicationInterface.aidl</span></div>
+
+      <div class="flow-boundary fb-android">
+        <div class="fb-label fbl-android">📦 Android Container — com.lge.car.webossystemservice</div>
+
+        <div class="flow-node" style="margin-bottom:6px;">
+          <div class="fn-title">① AIDL Boundary Layer</div>
+          <div class="fn-sub">
+            <strong>ContainerCommunicationStub</strong> (IContainerCommunicationInterface.Stub)<br>
+            Methods: registerMessage · registerStatus · sendMessage · getSystemData · setSystemData
+          </div>
+        </div>
+        <div class="flow-arrow" style="color:#4a90d9;">↕ <span class="fa-label">Direct function calls</span></div>
+
+        <div class="flow-node" style="margin-bottom:6px;">
+          <div class="fn-title">② Kotlin Orchestration Layer</div>
+          <div class="fn-sub">
+            <strong>Communicator</strong> (lazy singleton) → <strong>LcpCommunicator</strong><br>
+            Maps CID → destination name · serializes JSONObject → ByteArray · manages callbacks
+          </div>
+        </div>
+        <div class="flow-arrow" style="color:#4a90d9;">↕ <span class="fa-label">JNI — Kotlin external fun</span></div>
+
+        <div class="flow-node">
+          <div class="fn-title">③ Native JNI Layer</div>
+          <div class="fn-sub">
+            <strong>libprojection-lcp.so</strong> (JniOnLoad · LcpBusNativeService · LcpBusNativeManager)<br>
+            Registers native method table · forwards calls to libLCPBus · delivers callbacks to Kotlin
+          </div>
+        </div>
       </div>
-      <div class="card" style="border-left:3px solid var(--accent);">
-        <h4>③ Native JNI Layer</h4>
-        <p><code>projection-lcp</code> shared library — wraps the LCP C++ SDK. Exposes
-        <code>external fun</code>s in <code>LcpCommunicator.kt</code> via <code>System.loadLibrary()</code>.</p>
+
+      <div class="flow-arrow">↕ <span class="fa-label">Unix Domain Socket<br>/vendor/var/lib/shared/android1/lcpbus.sock</span></div>
+
+      <div class="flow-boundary fb-host">
+        <div class="fb-label fbl-host">🖥️ Host Linux OS</div>
+        <div class="flow-node" style="border-color:#e8a020; background:#1e1a0e;">
+          <div class="fn-title" style="color:#f0b840;">lcp-busd daemon (message broker)</div>
+          <div class="fn-sub">Routes messages to registered clients by destination name</div>
+        </div>
+      </div>
+
+      <div class="flow-arrow">↕ <span class="fa-label">Unix Domain Socket (shared bind-mount volume)</span></div>
+
+      <div class="flow-boundary fb-webos">
+        <div class="fb-label fbl-webos">📦 WebOS Container</div>
+        <div class="flow-node" style="border-color:#44a044; background:#0e1e0e;">
+          <div class="fn-title" style="color:#80e080;">WebOS Service — registered as "HCC_MANAGER1" / "HCC_MANAGER2"</div>
+          <div class="fn-sub">lcp-busd client — receives messages routed by name</div>
+        </div>
       </div>
     </div>
 
-    <pre style="margin-top:1.5rem;"><code><span class="c">// Data flow diagram</span>
-
-WebOS LCP Bus
-    │  (native C++ IPC)
-    ▼
-projection-lcp (.so)   ◄─── CMake-built native library
-    │  (JNI callbacks)
-    ▼
-LcpCommunicator.kt     ◄─── JNI externals, System.loadLibrary()
-    │
-    ▼
-Communicator.kt        ◄─── Kotlin singleton, wraps LcpCommunicator
-    │
-    ▼
-ContainerCommunicationStub.kt  ◄─── IContainerCommunicationInterface.Stub (AIDL)
-    │  (Binder IPC across processes)
-    ▼
-WospSystemProxy.kt     (in WebosProjectionService process)</code></pre>
+    <div class="insight-box">
+      <strong><i class="fas fa-info-circle"></i> Why Unix socket?</strong>
+      Android and WebOS run in separate Linux containers and cannot share memory or call each other directly.
+      The socket file at <code>/vendor/var/lib/shared/android1/lcpbus.sock</code> sits on a
+      <strong>bind-mount shared volume</strong> accessible from all containers.
+      <code>lcp-busd</code> owns the socket and acts as a broker — every client connects to it and
+      messages are routed by the registered destination name.
+    </div>
   </section>
 
   <!-- 3. JNI Gateway -->
   <section class="detail-section" id="jni">
     <h2>3. JNI Gateway: LcpCommunicator</h2>
     <p>
-      <code>LcpCommunicator</code> is where Kotlin meets native code. It loads the native
-      <code>projection-lcp</code> library and declares <code>external fun</code> signatures that map
-      directly to JNI functions implemented in C++.
+      <code>LcpCommunicator</code> bridges Kotlin and C++. It loads the native library on instance creation
+      and exposes four <code>private external fun</code> (instance-level, not companion object)
+      that map directly to C++ functions registered at load time.
     </p>
 
-    <pre><code><span class="c">// LcpCommunicator.kt</span>
-<span class="kw">class</span> LcpCommunicator : ICommunicator {
-
-    companion object {
-        init {
-            <span class="c">// Loads libprojection-lcp.so from the APK's lib/ directory</span>
-            System.loadLibrary(<span class="str">"projection-lcp"</span>)
-        }
-
-        <span class="c">// JNI externals — implemented in C++ (projection-lcp source)</span>
-        <span class="kw">external fun</span> connectLCPBus()
-        <span class="kw">external fun</span> registerCallback(callback: Any)
-        <span class="kw">external fun</span> registerStatusCallback(name: String, callback: Any)
-        <span class="kw">external fun</span> sendMessage(managerId: Int, cmd: Int, data: String)
-    }
-
-    <span class="c">// Map Android CID (container ID) to the LCP manager slot</span>
-    <span class="kw">private fun</span> cidToManagerId(cid: Int) = <span class="kw">when</span> (cid) {
-        1 -> HCC_MANAGER1   <span class="c">// user 0 (main user)</span>
-        2 -> HCC_MANAGER2   <span class="c">// secondary user / second display</span>
-        <span class="kw">else</span> -> <span class="kw">throw</span> IllegalArgumentException(<span class="str">"Unknown cid: $cid"</span>)
-    }
-
-    <span class="kw">override fun</span> connect() {
-        connectLCPBus()   <span class="c">// establishes connection to the LCP daemon</span>
-    }
-
-    <span class="kw">override fun</span> sendMessage(cid: Int, cmd: Int, data: String) {
-        sendMessage(cidToManagerId(cid), cmd, data)
-    }
-
-    <span class="c">// Called FROM native code when a message arrives from WebOS</span>
-    fun onMessageReceived(cmd: Int, data: String) {
-        DataChangeDispatcher.notifyDataChanged(cmd, data)
-    }
-}</code></pre>
-
-    <div class="insight-box" style="margin-top:1rem;">
-      <strong><i class="fas fa-lightbulb"></i> JNI callback direction:</strong>
-      The C++ library calls back into Java/Kotlin via a registered JNI callback object. This is the standard
-      Android JNI callback pattern: Java passes a reference to a Kotlin object; the native layer stores a
-      global JNI reference and calls its methods when an event arrives on the LCP bus.
+    <h3 style="margin-top:1.2rem; margin-bottom:0.8rem;">Library Load &amp; JNI Init Sequence</h3>
+    <div class="flow-wrap" style="max-width:580px;">
+      <div class="flow-node" style="border-color:#888;">
+        <div class="fn-title">Communicator.connection — first access (lazy)</div>
+        <div class="fn-sub">Creates LcpCommunicator instance → triggers instance init { }</div>
+      </div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-node">
+        <div class="fn-title">System.loadLibrary("projection-lcp")</div>
+        <div class="fn-sub">Loads libprojection-lcp.so from APK jniLibs/arm64-v8a/</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">OS calls automatically</span></div>
+      <div class="flow-node">
+        <div class="fn-title">JNI_OnLoad (C++) — runs once on library load</div>
+        <div class="fn-sub">
+          ① JniHelper::init(vm) — saves JavaVM reference for later callback use<br>
+          ② setenv("AGENT_SOCKET_PATH", "/vendor/var/lib/shared/android1/lcpbus.sock")<br>
+          ③ RegisterNatives — binds Kotlin external fun to C++ sMethods table
+        </div>
+      </div>
     </div>
 
-    <h3 style="margin-top:1.5rem;">Communicator — the Kotlin singleton wrapper</h3>
-    <pre><code><span class="c">// Communicator.kt — lazy-initialized Kotlin object</span>
-<span class="kw">object</span> Communicator {
-    <span class="kw">val</span> connection: ICommunicator by lazy { LcpCommunicator() }
-}</code></pre>
-    <p style="margin-top:0.5rem;">
-      The <code>object</code> singleton with <code>lazy</code> initialization guarantees the native library
-      is loaded exactly once regardless of how many callers reference <code>Communicator.connection</code>.
-    </p>
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">external fun → C++ Method Table</h3>
+    <table class="seq-table">
+      <thead>
+        <tr><th>Kotlin (LcpCommunicator)</th><th>C++ (LcpBusNativeService)</th><th>What it does</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>connectLCPBus(name: String?)</td>
+          <td>connectLCPBusWithName()</td>
+          <td>Calls <code>bus.connectLCPBus(name)</code> — opens socket, registers client name with lcp-busd</td>
+        </tr>
+        <tr>
+          <td>registerCallback(cb: IMessageCallback)</td>
+          <td>registerCallback()</td>
+          <td>Saves a global JNI reference to the Kotlin callback; registers a C++ lambda that calls
+          <code>LcpBusNativeManager::jniCallback()</code> on message arrival</td>
+        </tr>
+        <tr>
+          <td>registerStatusCallback(name, cb: IStatusCallback)</td>
+          <td>registerStatusCallback()</td>
+          <td>Saves a global JNI reference for peer connect/disconnect status events</td>
+        </tr>
+        <tr>
+          <td>sendMessage(dest: String, cmd: Int, data: ByteArray)</td>
+          <td>sendMessage()</td>
+          <td>Calls <code>bus.sendMessage(dest, cmd, bytes, len)</code> — writes the message frame to the socket</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">Outbound Flow: Android → WebOS</h3>
+    <div class="flow-wrap" style="max-width:640px;">
+      <div class="flow-node" style="border-color:#888;">
+        <div class="fn-title">ContainerCommunicationStub.sendMessage(cid=1, cmd, jsonString)</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">parse String → JSONObject</span></div>
+      <div class="flow-node">
+        <div class="fn-title">LcpCommunicator.sendMessage(cid=1, cmd, JSONObject)</div>
+        <div class="fn-sub">
+          Maps CID → dest name: <code>cid=1 → "HCC_MANAGER1"</code> &nbsp;/&nbsp; <code>cid=2 → "HCC_MANAGER2"</code><br>
+          Serializes JSONObject → ByteArray (UTF-8 string bytes)
+        </div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">private external fun sendMessage(dest, cmd, ByteArray)</span></div>
+      <div class="flow-node">
+        <div class="fn-title">C++: bus.sendMessage("HCC_MANAGER1", cmd, bytes, len)</div>
+        <div class="fn-sub">libLCPBus.so writes the message frame to the Unix socket → lcp-busd routes to WebOS</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">Inbound Flow: WebOS → Android (JNI callback chain)</h3>
+    <div class="flow-wrap" style="max-width:640px;">
+      <div class="flow-node" style="border-color:#44a044; background:#0e1e0e;">
+        <div class="fn-title" style="color:#80e080;">WebOS Service sends message on LCP bus</div>
+        <div class="fn-sub" style="color:#6a9a6a;">lcp-busd routes to "WEBOS_PROJECTION_HMI" (our registered client name)</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">libLCPBus recv thread reads from socket</span></div>
+      <div class="flow-node">
+        <div class="fn-title">C++ recv thread → registered callback lambda fires</div>
+        <div class="fn-sub">LcpBusNativeManager::jniCallback(cmd, msg_ptr, msg_size)</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">native thread — must attach to JVM first</span></div>
+      <div class="flow-node">
+        <div class="fn-title">JniHelper::getEnv() → AttachCurrentThread</div>
+        <div class="fn-sub">
+          Gets valid JNIEnv for this native thread<br>
+          Converts raw bytes → jbyteArray<br>
+          GetMethodID("onCallback", "(I[B)V") → CallVoidMethod
+        </div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">DetachCurrentThread after call</span></div>
+      <div class="flow-node" style="border-color:#888;">
+        <div class="fn-title">ICommunicator.IMessageCallback.onCallback(cmd: Int, msg: ByteArray)</div>
+        <div class="fn-sub">Kotlin lambda in ContainerCommunicationStub — handles the inbound message</div>
+      </div>
+    </div>
+
+    <div class="insight-box">
+      <strong><i class="fas fa-lightbulb"></i> Global JNI reference:</strong>
+      <code>LcpBusNativeManager</code> stores the Kotlin callback object using <code>NewGlobalRef()</code>
+      so it survives across JNI frames and garbage collection.
+      The recv thread always calls <code>AttachCurrentThread</code> to obtain a valid
+      <code>JNIEnv</code> and <code>DetachCurrentThread</code> after each call to avoid leaking thread state.
+    </div>
   </section>
 
   <!-- 4. Stub -->
   <section class="detail-section" id="stub">
     <h2>4. ContainerCommunicationStub — the AIDL Bridge</h2>
     <p>
-      <code>ContainerCommunicationStub</code> implements <code>IContainerCommunicationInterface.Stub</code>
-      — the Binder stub that remote processes call. It routes every call between the Kotlin/AIDL world
-      and the native LCP layer.
+      A Hilt-injected singleton that implements <code>IContainerCommunicationInterface.Stub</code>.
+      It coordinates all message flow between AIDL callers and the LCP bus,
+      and listens to system events via <code>DataChangeDispatcher</code>.
     </p>
 
-    <pre><code><span class="kw">@Singleton class</span> ContainerCommunicationStub <span class="kw">@Inject constructor</span>(
-    <span class="kw">private val</span> systemInfoMgr:    SystemSettingInfoManager,
-    <span class="kw">private val</span> systemNetworkMgr: SystemNetworkInfoManager,
-) : IContainerCommunicationInterface.Stub() {
+    <h3 style="margin-top:1.2rem; margin-bottom:0.8rem;">Initialization — strict order to prevent message loss</h3>
+    <div class="flow-wrap" style="max-width:600px;">
+      <div class="flow-node">
+        <div class="fn-title">Step 1 — Register callback BEFORE connecting</div>
+        <div class="fn-sub">
+          <code>Communicator.connection.registerMessage(lcpIMessageCallback)</code><br>
+          Stores the Kotlin callback in the JNI layer so incoming messages are captured
+          even if they arrive during the connection handshake.
+        </div>
+      </div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-node">
+        <div class="fn-title">Step 2 — Connect</div>
+        <div class="fn-sub">
+          <code>connectLcp() → Communicator.connection.connect("WEBOS_PROJECTION_HMI")</code><br>
+          Registers this process as a named client on lcp-busd. WebOS services can now send
+          messages addressed to "WEBOS_PROJECTION_HMI".
+        </div>
+      </div>
+      <div class="flow-arrow">↓</div>
+      <div class="flow-node">
+        <div class="fn-title">Step 3 — Subscribe to system events</div>
+        <div class="fn-sub">
+          <code>DataChangeDispatcher.registerListener(this)</code><br>
+          Receives notifications when system state changes (e.g. WiFi connection).
+        </div>
+      </div>
+    </div>
 
-    <span class="c">// Registered callbacks per CID (container ID)</span>
-    <span class="kw">private val</span> msgCallbacks    = ConcurrentHashMap&lt;Int, IContainerCommunicationInterface.IMessageCallback&gt;()
-    <span class="c">// Messages that arrived before client registered its callback</span>
-    <span class="kw">private val</span> pendingMessages = ConcurrentHashMap&lt;Int, Queue&lt;Pair&lt;Int, String&gt;&gt;&gt;()
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">Two Distinct Inbound Paths</h3>
+    <div class="two-col-diagram">
+      <div class="diag-box" style="border-color:#4a90d9;">
+        <h4>Path A — LCP Bus message (WebOS → Android)</h4>
+        <ul>
+          <li><code>lcpIMessageCallback.onCallback(cmd, bytes)</code> fires</li>
+          <li>Parse bytes → JSON string</li>
+          <li>Extract <code>"container_id"</code> from JSON (default: 1)</li>
+          <li>Call <code>triggerMessageCallback(cid, cmd, payload)</code></li>
+          <li>→ Delivered to <strong>that specific CID only</strong></li>
+          <li>No callback yet? → store in <code>messageMap[cid]</code> queue</li>
+        </ul>
+      </div>
+      <div class="diag-box" style="border-color:#44a044;">
+        <h4>Path B — System event (e.g. WiFi change)</h4>
+        <ul>
+          <li><code>SystemNetworkInfoManager</code> detects state change via <code>WifiProxyManager</code></li>
+          <li>Calls <code>DataChangeDispatcher.notifyDataChanged(cmd, json)</code></li>
+          <li>→ <code>Stub.onDataChanged(cmd, data)</code> fires</li>
+          <li>Loops <code>i = 1 to 2</code>: calls <code>triggerMessageCallback(i, ...)</code></li>
+          <li>→ <strong>Broadcast to ALL CIDs</strong> (driver + passenger)</li>
+        </ul>
+      </div>
+    </div>
 
-    init {
-        <span class="c">// Register a callback to receive ALL incoming messages from LCP</span>
-        Communicator.connection.registerCallback(<span class="kw">object</span> {
-            fun onReceive(cmd: Int, data: String) {
-                <span class="c">// Fan-out to cid 1 AND cid 2</span>
-                triggerMessageCallback(1, cmd, data)
-                triggerMessageCallback(2, cmd, data)
-                DataChangeDispatcher.notifyDataChanged(cmd, data)
-            }
-        })
-        Communicator.connection.connect()
-        systemNetworkMgr.init(DataChangeDispatcher)
-    }
+    <div class="insight-box">
+      <strong><i class="fas fa-exclamation-circle"></i> Key distinction:</strong>
+      LCP bus messages embed a <code>container_id</code> field in their JSON payload — only the matching
+      CID receives the message. System events (network state, version info) have no per-CID scope,
+      so they are broadcast to all active CIDs via the <code>onDataChanged</code> path.
+    </div>
 
-    <span class="c">// Called by WospSystemProxy.bind() over AIDL</span>
-    <span class="kw">override fun</span> registerMessage(cid: Int, cb: IMessageCallback): Boolean {
-        msgCallbacks[cid] = cb
-        <span class="c">// Flush any messages that arrived before registration</span>
-        pendingMessages[cid]?.forEach { (cmd, data) -> cb.onCallback(cmd, data) }
-        pendingMessages.remove(cid)
-        <span class="kw">return true</span>
-    }
-
-    <span class="c">// Called by WospSystemProxy when sending data TO WebOS</span>
-    <span class="kw">override fun</span> sendMessage(cid: Int, cmd: Int, data: String): Boolean {
-        Communicator.connection.sendMessage(cid, cmd, data)
-        <span class="kw">return true</span>
-    }
-
-    <span class="c">// Synchronous data getter (version, region, language, network)</span>
-    <span class="kw">override fun</span> getSystemData(cmd: Int): String = <span class="kw">when</span> (cmd) {
-        GET_VERSION_INFO  -> systemInfoMgr.getVersionInfo()
-        GET_REGION        -> systemInfoMgr.getRegion()
-        GET_LANGUAGE      -> systemInfoMgr.getLanguage()
-        GET_NETWORK_ONOFF -> systemNetworkMgr.getNetworkOnOff()
-        GET_NETWORK_INFO  -> systemNetworkMgr.getNetworkInfo()
-        else -> <span class="str">"{}"</span>
-    }
-
-    <span class="kw">private fun</span> triggerMessageCallback(cid: Int, cmd: Int, data: String) {
-        <span class="kw">val</span> cb = msgCallbacks[cid]
-        if (cb != <span class="kw">null</span>) cb.onCallback(cmd, data)
-        else pendingMessages.getOrPut(cid) { LinkedList() }.add(cmd to data)
-    }
-}</code></pre>
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">AIDL Interface Methods</h3>
+    <table class="seq-table">
+      <thead>
+        <tr><th>Method</th><th>Direction</th><th>Behavior</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>registerMessage(cid, cb)</td>
+          <td>Client → Service</td>
+          <td>Stores callback in <code>callbackMap[cid]</code>. Immediately replays any queued messages
+          from <code>messageMap[cid]</code> that arrived before registration.</td>
+        </tr>
+        <tr>
+          <td>registerStatus(name, cb)</td>
+          <td>Client → Service</td>
+          <td>Monitors connect/disconnect of a named LCP peer. Notifies via <code>IStatusCallback</code>.</td>
+        </tr>
+        <tr>
+          <td>sendMessage(cid, cmd, data)</td>
+          <td>Client → LCP Bus</td>
+          <td>Parses <code>data</code> as JSON, delegates to
+          <code>Communicator.connection.sendMessage(cid, cmd, JSONObject)</code> → JNI → socket write.</td>
+        </tr>
+        <tr>
+          <td>getSystemData(cmd)</td>
+          <td>Client → Service (sync)</td>
+          <td>Synchronous read. Routes to <code>SystemSettingInfoManager</code>
+          (version, region, language) or <code>SystemNetworkInfoManager</code> (network state) by cmd.</td>
+        </tr>
+        <tr>
+          <td>setSystemData(cmd, data)</td>
+          <td>Client → Service</td>
+          <td>Declared in AIDL — reserved for future use (currently empty implementation).</td>
+        </tr>
+      </tbody>
+    </table>
 
     <div class="card-grid" style="margin-top:1.5rem;">
       <div class="card">
         <h4>Why CID routing?</h4>
-        <p>The Android VM supports two concurrent user sessions displayed on separate screens
-        (driver + passenger). Each session is a "container" with its own CID (1 or 2).
-        WebOS messages are broadcast to both CIDs so each user's HMI receives relevant events.</p>
+        <p>The Android VM supports two concurrent user sessions on separate screens (driver + passenger).
+        Each session has a CID (1 or 2). WebOS embeds the target <code>container_id</code> in message
+        payloads to address a specific session. System-wide events skip this and broadcast to all CIDs.</p>
       </div>
       <div class="card">
         <h4>Pre-registration queue</h4>
-        <p>The LCP bus can deliver messages before the projection service has bound and called
-        <code>registerMessage()</code>. A <code>ConcurrentHashMap</code> of pending queues stores these
-        messages and replays them immediately upon registration — zero message loss on startup.</p>
+        <p>lcp-busd can deliver messages before the projection service binds and calls
+        <code>registerMessage()</code>. Messages are stored in <code>messageMap[cid]</code> and
+        replayed immediately on registration — zero message loss on startup.</p>
       </div>
     </div>
   </section>
@@ -253,111 +433,107 @@ WospSystemProxy.kt     (in WebosProjectionService process)</code></pre>
   <section class="detail-section" id="managers">
     <h2>5. System Managers</h2>
     <p>
-      The system module contains lightweight managers that serve synchronous data queries
-      (called from <code>getSystemData()</code>).
+      Two Hilt-injected singletons provide data for <code>getSystemData()</code> queries
+      and push real-time updates through <code>DataChangeDispatcher</code>.
     </p>
 
-    <h3 style="margin-top:1rem;">SystemSettingInfoManager</h3>
-    <pre><code><span class="kw">@Singleton class</span> SystemSettingInfoManager {
-    fun getVersionInfo(): String {
-        <span class="c">// Read OTA version from platform file</span>
-        <span class="kw">return try</span> {
-            File(<span class="str">"/etc/update/official_version"</span>).readText().trim()
-        } <span class="kw">catch</span> (e: Exception) { <span class="str">"1.0.0.0000"</span> }
-    }
-    fun getRegion(): String   = <span class="str">"Europa"</span>
-    fun getLanguage(): String = <span class="str">"en-US"</span>
-}</code></pre>
+    <div class="two-col-diagram">
+      <div class="diag-box" style="border-color:#7ab8f5;">
+        <h4>SystemSettingInfoManager</h4>
+        <ul>
+          <li><strong>getVersionInfo()</strong> — reads <code>etc/update/official_version</code>;
+          fallback: hardcoded build string</li>
+          <li><strong>getRegion()</strong> — hardcoded <code>"Europa"</code> (I-290 project)</li>
+          <li><strong>getLanguage()</strong> — hardcoded <code>"en-US"</code> (I-290 project)</li>
+          <li>Synchronous reads only — no background monitoring</li>
+        </ul>
+      </div>
+      <div class="diag-box" style="border-color:#80e080;">
+        <h4>SystemNetworkInfoManager</h4>
+        <ul>
+          <li>Uses LGE proprietary <strong>WifiProxyManager</strong>
+          (AIDL-based, not standard Android BroadcastReceiver)</li>
+          <li>Registers <strong>IWifiEventListener.Stub()</strong> for WiFi events</li>
+          <li>Monitors <code>SUPPLICANT_CONNECTION_CHANGE_ACTION</code></li>
+          <li>On state change → <code>DataChangeDispatcher.notifyDataChanged()</code></li>
+          <li><strong>getNetworkOnOff()</strong> → JSON: <code>isInternetConnectionAvailable</code></li>
+          <li><strong>getNetworkInfo()</strong> → JSON: type, IP address</li>
+        </ul>
+      </div>
+    </div>
 
-    <h3 style="margin-top:1.5rem;">SystemNetworkInfoManager</h3>
-    <pre><code><span class="kw">@Singleton class</span> SystemNetworkInfoManager <span class="kw">@Inject constructor</span>(@ApplicationContext ctx: Context) {
-
-    <span class="kw">private val</span> wifiMgr = WifiProxyManager(ctx)   <span class="c">// LGE-internal WiFi API</span>
-
-    fun init(dispatcher: DataChangeDispatcher) {
-        <span class="c">// Monitor supplicant DHCP state changes</span>
-        ctx.registerReceiver(<span class="kw">object</span> : BroadcastReceiver() {
-            <span class="kw">override fun</span> onReceive(ctx: Context, intent: Intent) {
-                dispatcher.notifyDataChanged(GET_NETWORK_ONOFF, getNetworkOnOff())
-                dispatcher.notifyDataChanged(GET_NETWORK_INFO,  getNetworkInfo())
-            }
-        }, IntentFilter(WifiManager.SUPPLICANT_CONNECTION_CHANGE_ACTION))
-    }
-
-    fun getNetworkOnOff(): String =
-        Gson().toJson(mapOf(<span class="str">"isInternetConnectionAvailable"</span> to wifiMgr.isConnected))
-
-    fun getNetworkInfo(): String {
-        <span class="kw">val</span> dhcp = wifiMgr.dhcpInfo
-        <span class="kw">return</span> Gson().toJson(mapOf(
-            <span class="str">"type"</span>                         to <span class="str">"wifi"</span>,
-            <span class="str">"isInternetConnectionAvailable"</span> to wifiMgr.isConnected,
-            <span class="str">"wifi"</span>                         to mapOf(<span class="str">"ipAddress"</span> to dhcp.ipAddress)
-        ))
-    }
-}</code></pre>
+    <h3 style="margin-top:1.5rem; margin-bottom:0.8rem;">Network Event Flow</h3>
+    <div class="flow-wrap" style="max-width:560px;">
+      <div class="flow-node" style="border-color:#80e080; background:#0e1e0e;">
+        <div class="fn-title" style="color:#80e080;">WifiProxyManager → IWifiEventListener.onWifiEventListener()</div>
+        <div class="fn-sub" style="color:#6a9a6a;">LGE AIDL callback fires on SUPPLICANT_CONNECTION_CHANGE_ACTION</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">Only fires when connected state actually changes (debounced)</span></div>
+      <div class="flow-node">
+        <div class="fn-title">DataChangeDispatcher.notifyDataChanged(GET_NETWORK_ONOFF / GET_NETWORK_INFO, json)</div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">pub-sub: all registered SystemDataChangeListeners notified</span></div>
+      <div class="flow-node">
+        <div class="fn-title">ContainerCommunicationStub.onDataChanged(cmd, data)</div>
+        <div class="fn-sub">Broadcasts to CID 1 and CID 2 via triggerMessageCallback loop</div>
+      </div>
+    </div>
   </section>
 
   <!-- 6. CMake -->
   <section class="detail-section" id="cmake">
     <h2>6. CMake Build for the Native Library</h2>
     <p>
-      The <code>system</code> module's <code>build.gradle.kts</code> configures the NDK and CMake to build
-      the <code>projection-lcp</code> shared library that wraps the LCP SDK.
+      The <code>system</code> module uses CMake (via Android NDK) to compile
+      all JNI bridge <code>.cpp</code> files and link them against the pre-built LCP SDK,
+      producing <code>libprojection-lcp.so</code>.
     </p>
-    <pre><code><span class="c">// system/build.gradle.kts (relevant parts)</span>
-android {
-    defaultConfig {
-        ndk { abiFilters += setOf(<span class="str">"arm64-v8a"</span>) }   <span class="c">// Qualcomm SA8155 is ARM64</span>
 
-        externalNativeBuild {
-            cmake {
-                cppFlags(<span class="str">"-std=c++17"</span>)
-                arguments(<span class="str">"-DANDROID_STL=c++_shared"</span>)
-            }
-        }
-    }
-
-    externalNativeBuild {
-        cmake {
-            path = file(<span class="str">"src/main/cpp/CMakeLists.txt"</span>)
-            version = <span class="str">"3.22.1"</span>
-        }
-    }
-
-    buildFeatures { aidl = true }
-}
-
-dependencies {
-    <span class="c">// Pre-built LCP SDK JARs and AARs from the platform</span>
-    implementation(fileTree(mapOf(<span class="str">"dir"</span> to <span class="str">"libs"</span>, <span class="str">"include"</span> to listOf(<span class="str">"*.jar"</span>, <span class="str">"*.aar"</span>))))
-}</code></pre>
-
-    <pre><code><span class="c"># CMakeLists.txt (conceptual structure)</span>
-cmake_minimum_required(VERSION 3.22.1)
-project(projection-lcp)
-
-add_library(projection-lcp SHARED
-    lcp_bridge.cpp      # JNI bridge functions
-    lcp_communicator.cpp
-)
-
-target_link_libraries(projection-lcp
-    android log
-    ${LCP_SDK_LIB}      # Pre-built LCP C++ SDK .so
-)</code></pre>
+    <div class="flow-wrap" style="max-width:640px;">
+      <div class="two-col-diagram" style="width:100%; margin:0 0 0 0;">
+        <div class="diag-box">
+          <h4>Source files (auto-collected)</h4>
+          <ul>
+            <li>All <code>*.cpp</code> under <code>src/main/cpp/</code> via <code>file(GLOB_RECURSE)</code></li>
+            <li>JniOnLoad.cpp</li>
+            <li>LcpBusNativeService.cpp</li>
+            <li>LcpBusNativeManager.cpp</li>
+            <li>JniHelper.cpp</li>
+          </ul>
+        </div>
+        <div class="diag-box">
+          <h4>Pre-built SDK (IMPORTED)</h4>
+          <ul>
+            <li><code>jniLibs/arm64-v8a/libLCPBus.so</code> — real device build</li>
+            <li><code>jniLibs/arm64-v8a/libLCPBus_window.so</code> — Windows dev environment</li>
+            <li>CMake detects <code>OS=Windows_NT</code> env var to switch automatically</li>
+          </ul>
+        </div>
+      </div>
+      <div class="flow-arrow">↓ <span class="fa-label">Linked with: lcp_bus · log · android</span></div>
+      <div class="flow-node">
+        <div class="fn-title">Output: libprojection-lcp.so</div>
+        <div class="fn-sub">ABI: arm64-v8a only (Qualcomm SA8155) · C++17 · c++_shared STL · Release build</div>
+      </div>
+    </div>
 
     <div class="card-grid" style="margin-top:1.5rem;">
       <div class="card">
         <h4>arm64-v8a only</h4>
-        <p>The Qualcomm SA8155 SoC is an ARM64 platform. Limiting to a single ABI reduces APK size
-        and avoids shipping unused x86/armeabi variants on a fixed-hardware automotive target.</p>
+        <p>The Qualcomm SA8155 SoC is an ARM64-only platform. A single ABI target reduces APK size
+        and avoids shipping unused x86/armeabi variants on a fixed-hardware automotive system.</p>
       </div>
       <div class="card">
         <h4>c++_shared STL</h4>
-        <p>The LCP SDK uses the shared C++ STL (<code>libc++_shared.so</code>). Using
-        <code>c++_shared</code> avoids duplicate STL symbols when the LCP .so and the JNI bridge
-        are loaded in the same process.</p>
+        <p><code>libLCPBus.so</code> uses the shared C++ STL (<code>libc++_shared.so</code>).
+        Setting <code>-DANDROID_STL=c++_shared</code> ensures both libraries share the same STL
+        instance, preventing duplicate symbol conflicts at runtime.</p>
+      </div>
+      <div class="card">
+        <h4>Windows dev build support</h4>
+        <p>CMake checks the <code>OS</code> environment variable at build time. On Windows,
+        it links <code>libLCPBus_window.so</code> instead of the production binary, enabling
+        local development and compilation without a Linux build host.</p>
       </div>
     </div>
   </section>
@@ -367,40 +543,47 @@ target_link_libraries(projection-lcp
     <h2>7. Why These Choices?</h2>
     <table>
       <thead>
-        <tr><th>Choice</th><th>Alternatives Considered</th><th>Reason Selected</th></tr>
+        <tr><th>Choice</th><th>Alternative Considered</th><th>Reason Selected</th></tr>
       </thead>
       <tbody>
         <tr>
           <td>Separate system service process</td>
           <td>Load native library directly in the projection service</td>
-          <td>A native crash in the JNI layer would only kill the system service, not the projection service or HMI.
-          Process isolation improves resilience.</td>
+          <td>A native crash in JNI only kills the system service, not the projection UI.
+          Process isolation improves resilience and allows independent restart.</td>
         </tr>
         <tr>
-          <td>AIDL boundary between service and system</td>
+          <td>AIDL boundary between processes</td>
           <td>Local Binder (same-process interface)</td>
-          <td>AIDL enforces a strict API contract between the two modules, allows independent deployment
-          (system service can be updated without recompiling the projection service), and
-          provides Binder-level security (callers are verified by UID).</td>
+          <td>AIDL enforces a strict API contract, enables independent module deployment,
+          and provides Binder-level UID security so only authorized processes can access the LCP bus.</td>
         </tr>
         <tr>
-          <td>JNI in Kotlin companion object (<code>external fun</code>)</td>
-          <td>Wrap in a separate Java utility class</td>
-          <td>Kotlin <code>external fun</code> in a companion object is idiomatic, avoids static Java boilerplate,
-          and allows the JNI function to live alongside its Kotlin counterpart for readability.</td>
+          <td>Register callback BEFORE connecting</td>
+          <td>Connect first, then register</td>
+          <td>lcp-busd can push messages immediately on connection. Registering the Kotlin callback
+          first guarantees no message is dropped during the brief connection setup window.</td>
         </tr>
         <tr>
-          <td>DataChangeDispatcher pub-sub for inbound messages</td>
-          <td>Direct callback from JNI to stub</td>
-          <td>The dispatcher decouples the JNI layer from the stub — the JNI callback fires events into
-          the dispatcher, and any number of listeners (stub, network manager) subscribe independently.</td>
+          <td>DataChangeDispatcher pub-sub for system events</td>
+          <td>Direct call from SystemNetworkInfoManager to stub</td>
+          <td>The dispatcher decouples <code>SystemNetworkInfoManager</code> from
+          <code>ContainerCommunicationStub</code>. The manager fires events without knowing who
+          is listening, keeping each component independently testable and maintainable.</td>
         </tr>
         <tr>
-          <td>Pending message queue (pre-registration)</td>
-          <td>Drop messages before registration; require explicit re-request</td>
-          <td>Automotive startup involves tight timing windows. Messages from WebOS can arrive
-          milliseconds after boot before Android services finish binding.
-          Queueing prevents any silent data loss during the startup race.</td>
+          <td>Pre-registration message queue</td>
+          <td>Drop messages before registration; require explicit re-fetch</td>
+          <td>Automotive startup timing is tight. Messages from WebOS can arrive milliseconds
+          after boot before the projection service finishes binding.
+          Queuing prevents any silent data loss during the startup race.</td>
+        </tr>
+        <tr>
+          <td>LGE WifiProxyManager (not BroadcastReceiver)</td>
+          <td>Standard Android WifiManager + BroadcastReceiver</td>
+          <td>The platform exposes WiFi state through a proprietary AIDL service
+          (<code>WifiProxyManager</code>) which provides finer-grained events and DHCP info
+          not available through the standard Android WiFi API on this automotive platform.</td>
         </tr>
       </tbody>
     </table>
