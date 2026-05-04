@@ -70,27 +70,33 @@ function animateVideoForTheme(newTheme) {
 function initVideoForTheme(theme) {
     if (!profileVideo || !profileVideoReverse) return;
     if (theme === 'dark') {
+        // Dark theme: play video.mp4 once, stop at last frame
         profileVideoReverse.style.display = 'none';
         profileVideo.style.display = 'block';
-        const apply = () => {
-            profileVideo.currentTime = profileVideo.duration;
-            profileVideo.pause();
-        };
-        if (profileVideo.readyState >= 1) apply();
-        else profileVideo.addEventListener('loadedmetadata', apply, { once: true });
+        profileVideo.currentTime = 0;
+        const p = profileVideo.play();
+        if (p) p.catch(() => {});
+        profileVideo.addEventListener('ended', () => profileVideo.pause(), { once: true });
     } else {
-        profileVideoReverse.style.display = 'none';
-        profileVideo.style.display = 'block';
-        const apply = () => {
-            profileVideo.currentTime = 0;
-            profileVideo.pause();
-        };
-        if (profileVideo.readyState >= 1) apply();
-        else profileVideo.addEventListener('loadedmetadata', apply, { once: true });
+        // Light theme: play video_reverse.mp4 once, stop at last frame
+        profileVideo.style.display = 'none';
+        profileVideoReverse.style.display = 'block';
+        profileVideoReverse.currentTime = 0;
+        const p = profileVideoReverse.play();
+        if (p) p.catch(() => {});
+        profileVideoReverse.addEventListener('ended', () => profileVideoReverse.pause(), { once: true });
     }
 }
 
 initVideoForTheme(currentTheme);
+
+// Click on circular-frame to toggle theme
+const circularFrame = document.querySelector('.circular-frame');
+if (circularFrame) {
+    circularFrame.addEventListener('click', () => {
+        themeToggle.click();
+    });
+}
 // ── End Profile Video Theme Animation ──────────────────────────────────────
 
 // Mobile Navigation Toggle
