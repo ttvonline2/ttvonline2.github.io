@@ -334,8 +334,8 @@ const exportPdfBtn = document.getElementById('exportPdfBtn');
 
 exportPdfBtn.addEventListener('click', () => {
     const link = document.createElement('a');
-    link.href = 'CV/[Android App Engineer] Truong_Tan_Vang.pdf';
-    link.download = '[Android App Engineer] Truong_Tan_Vang.pdf';
+    link.href = 'CV/[Android Engineer] Truong_Tan_Vang.pdf';
+    link.download = '[Android Engineer] Truong_Tan_Vang.pdf';
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
