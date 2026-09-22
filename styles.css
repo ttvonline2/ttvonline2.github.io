@@ -65,13 +65,34 @@ html {
     padding: 0 20px;
 }
 
+.discord-banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    padding: 0.45rem 1rem;
+    background: var(--primary-color);
+    text-align: center;
+    z-index: 1001;
+}
+
+.discord-banner a {
+    color: #ffffff;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.discord-banner a:hover {
+    text-decoration: underline;
+}
+
 /* Navigation */
 .navbar {
     background: var(--navbar-bg);
     box-shadow: var(--shadow);
     position: fixed;
     width: 100%;
-    top: 0;
+    top: 36px;
     z-index: 1000;
     transition: all 0.3s ease;
 }
