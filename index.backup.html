@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Personal Skills Portfolio - Showcase of my professional skills and expertise">
+    <title>Vang Truong | Android Developer</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+    <div class="discord-banner">
+        <a href="https://discord.gg/XCXxS7e7H" target="_blank" rel="noopener noreferrer">
+            Join the Discord community
+        </a>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <h2>Vang Truong</h2>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#skills">Skills</a></li>
+                <li><a href="#experience">Experience</a></li>
+                <li><a href="#certificates">Certificates</a></li>
+                <li><a href="#projects">Projects</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+            <div class="nav-actions">
+                <button class="export-pdf-btn" id="exportPdfBtn" aria-label="Export to PDF">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>Export CV</span>
+                </button>
+                <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <div class="hamburger">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="container">
+            <div class="hero-content">
+                <div class="hero-text">
+                    <h1 class="name-title">Truong Tan Vang</h1>
+                    <h2 class="job-title">Software Engineer</h2>
+                    <p class="hero-description">I am a passionate software engineer with expertise in building Android software. I love turning ideas into reality through code.</p>
+                    <div class="hero-buttons">
+                        <a href="#experience" class="btn btn-primary">View Experience</a>
+                        <a href="#contact" class="btn btn-secondary">Get in Touch</a>
+                    </div>
+                </div>
+                <div class="hero-image">
+                    <div class="circular-frame">
+                        <video src="images/video.mp4" class="profile-video" id="profileVideo" muted playsinline preload="auto"></video>
+                        <video src="images/video_reverse.mp4" class="profile-video" id="profileVideoReverse" muted playsinline preload="auto" style="display:none;"></video>
+                    </div>
+                    <div class="frame-tooltip">Nice to meet you! 👋</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills" class="skills">
+        <div class="container">
+            <h2 class="section-title">Core Skills</h2>
+            <div class="skills-grid-modern">
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-java"></i>
+                    </div>
+                    <span class="skill-name">Java/Kotlin</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-code"></i>
+                    </div>
+                    <span class="skill-name">C++</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-python"></i>
+                    </div>
+                    <span class="skill-name">Python Script</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-linux"></i>
+                    </div>
+                    <span class="skill-name">Linux Environment</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-git-alt"></i>
+                    </div>
+                    <span class="skill-name">Git</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <span class="skill-name">Github Copilot</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-brain"></i>
+                    </div>
+                    <span class="skill-name">AI tools</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-project-diagram"></i>
+                    </div>
+                    <span class="skill-name">Algorithm</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-cogs"></i>
+                    </div>
+                    <span class="skill-name">CI/CD Tools</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-tasks"></i>
+                    </div>
+                    <span class="skill-name">Agile</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fas fa-file-alt"></i>
+                    </div>
+                    <span class="skill-name">ASPICE Documents</span>
+                </div>
+                <div class="skill-item">
+                    <div class="skill-icon-modern">
+                        <i class="fab fa-android"></i>
+                    </div>
+                    <span class="skill-name">Android SDK</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Experience Section -->
+    <section id="experience" class="experience">
+        <div class="container">
+            <h2 class="section-title">Experience</h2>
+            <div class="experience-timeline">
+                <!-- Experience Item 1 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Coding Expert &amp; Functional Architect</h3>
+                                <p class="company-name">LG ELECTRONICS</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Aug 2025 - Present</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: HKMC – Hyundai, GM</h4>
+                    <p class="experience-description">
+                        <strong>1. GVM SystemUI [Maintenance &amp; Enhancement]</strong><br>
+                        Inherited and extended AOSP SystemUI for the GM automotive project:
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><a href="Experience/GvmSystemUI/01-multi-theme-screen.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Rebuilt layout to support multiple themes, vehicle models, and screen sizes.</li>
+                        <li><a href="Experience/GvmSystemUI/02-quick-control-panel.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Created a new <strong>QuickControl</strong> floating panel using WindowManager for quick system settings.</li>
+                        <li><a href="Experience/GvmSystemUI/03-powermanager-minimal-burnin.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Modified <strong>PowerManagerService</strong> to support Minimal Mode and Burn-in protection popups.</li>
+                        <li><a href="Experience/GvmSystemUI/04-navbar-inset-blocking.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Updated <strong>com.android.internal.policy</strong> to block app content from rendering beneath the Navigation Bar.</li>
+                        <li><a href="Experience/GvmSystemUI/05-background-blur.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Enabled background blur via <code>ro.surface_flinger.supports_background_blur=1</code>.</li>
+                        <li><a href="Experience/GvmSystemUI/06-unit-testing.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Unit Testing with JUnit 4 and Mockito-Kotlin.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>2. Improving Project Developer Environment</strong>
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><a href="Experience/GvmSystemUI/08-adb-container-setup.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured ADB setup directly into Android containers with mountable system/system_ext partitions.</li>
+                        <li><a href="Experience/GvmSystemUI/09-python-build-sync.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Set up Python scripts to sync source code to the build server with automated download and installation.</li>
+                        <li><a href="Experience/GvmSystemUI/07-gradle-build.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured Gradle build for SystemUI to streamline the build and testing workflow.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>3. Technical support:</strong> Manual HMI, QIBLA HMI, Settings HMI, Vehicle Information, LgeUiLib, Talkback service, Keyboards.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">Linux OS</span>
+                        <span class="tech-badge">Android Container</span>
+                        <span class="tech-badge">Java</span>
+                        <span class="tech-badge">Kotlin</span>
+                        <span class="tech-badge">LXC</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 2 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Functional Owner (Technical Leader)</h3>
+                                <p class="company-name">LG ELECTRONICS</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Sep 2024 - Aug 2025</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: HKMC – Hyundai, BMW</h4>
+                    <p class="experience-description">
+                        <strong>1. WebOS Projection Android BMW [New Development]</strong><br>
+                        A dual-layer framework bridging Android (container) and WebOS (container) via an LCP Bus:
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><a href="Experience/WebosProjection/01-hmi-layer.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>HMI Layer:</strong> Jetpack Compose-based Android Launcher rendered transparently over WebOS, using AIDL Binder for service communication with System UID privileges and a Public API for third-party integration.</li>
+                        <li><a href="Experience/WebosProjection/02-projection-service.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>Projection Service:</strong> Central broker using Proxy/Manager patterns with Coroutine-based auto-reconnection.</li>
+                        <li><a href="Experience/WebosProjection/03-system-service.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>System Service:</strong> JNI Gateway bridging Android to the WebOS native LCP bus.</li>
+                        <li><a href="Experience/WebosProjection/04-data-ipc.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> <strong>Data &amp; IPC:</strong> Standardized on AIDL across all layers with JSON polymorphic deserialization.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>2. Technical support:</strong> ECall HMI/Service, Manual HMI, QIBLA HMI.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">QNX Hypervisor</span>
+                        <span class="tech-badge">Android VM</span>
+                        <span class="tech-badge">SOMEIP</span>
+                        <span class="tech-badge">Java</span>
+                        <span class="tech-badge">Kotlin</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 3 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Functional Owner (Technical Leader)</h3>
+                                <p class="company-name">LG ELECTRONICS</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jul 2023 - Sep 2024</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: AIVI – Nissan &amp; Renault (Automotive)</h4>
+                    <p class="experience-description">
+                        <strong>1. HVAC, Seat Services [Maintenance]</strong><br>
+                        Plug-in services (running in the same process as the car service) that retrieve/set information from live and persistence configurations, providing data for the HVAC/SEAT HMI.
+                    </p>
+                    <p class="experience-description" style="margin-top: 0.5rem;">
+                        <strong>2. FoD Service [New Development]</strong><br>
+                        Feature on Demand — handling applicability checks, execution validation, and state persistence for vehicle software features delivered via OCM (Off-board Communication Manager).
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><a href="Experience/FodService/01-state-machine-pipeline.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> State-machine driven execution pipeline ensuring ordered, resumable processing of FOD lifecycle events across reboots.</li>
+                        <li><a href="Experience/FodService/02-sepolicy.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Configured SEPolicy: dedicated <code>nissan_fod_file</code> label with rw access for <code>alliancecarservice_app</code> only.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>3. Technical support:</strong> Unit Service, User Profile Service.<br>
+                        <strong>4. ASPICE support:</strong> Reviewed all ASPICE documents (SRS, SAD, SDD, TC) for the team's modules.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">Android Automotive OS</span>
+                        <span class="tech-badge">Binder</span>
+                        <span class="tech-badge">AIDL</span>
+                        <span class="tech-badge">IPC</span>
+                        <span class="tech-badge">Java</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 4 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/LG_logo_(2014).svg.png" alt="LG Electronics" style="width: 50px; height: auto; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Embedded Software Developer</h3>
+                                <p class="company-name">LG ELECTRONICS</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Jun 2021 - Jul 2023</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">Project: PIVI – Land Rover (Automotive)</h4>
+                    <p class="experience-description">
+                        <strong>1. Online Media - HMI Layer [Maintenance &amp; Enhancement]</strong><br>
+                        An application in the car that allows users to listen to online media content like Spotify, TuneIn, Deezer, Kuwo, Alexa, and Tmall Genie.
+                    </p>
+                    <ul class="experience-description" style="margin-left: 2rem; margin-top: 0.5rem; margin-bottom: 1rem;">
+                        <li><a href="Experience/PIVI/01-caching.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Improved app performance through caching implementation.</li>
+                        <li><a href="Experience/PIVI/02-dynamic-background-color.html" class="detail-link"><i class="fas fa-external-link-alt"></i></a> Enhanced UX with dynamic background colors based on album artwork.</li>
+                    </ul>
+                    <p class="experience-description">
+                        <strong>2. Cluster Service – Service Layer [Maintenance &amp; Enhancement]</strong><br>
+                        A service for the exchange of information between the Cluster device and other services. Provides map, intersection, media, and phone data to the Cluster display via SOME/IP, CAN, and APIX protocols.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">QNX OS</span>
+                        <span class="tech-badge">QT Framework</span>
+                        <span class="tech-badge">IPC</span>
+                        <span class="tech-badge">C++</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 3 -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/Doosan_logo.svg.png" alt="Doosan" style="width: 50px; height: 50px; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Embedded Software Developer</h3>
+                                <p class="company-name">DOOSAN Viet Nam</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>June 2019 - June 2021</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">1. Mini-Car Inspect Inside Piping <span style="font-size: 0.8rem; font-weight: normal; color: var(--primary-color);">[New Development] C/C++ (Raspberry Pi) · C# (Xamarin)</span></h4>
+                    <p class="experience-description">
+                        Using a smartphone to control a mini-car via Wi-Fi. The mini-car, equipped with a camera (Raspberry Pi, camera module, servo, and DC motor), goes inside the piping and streams live video to the smartphone (Xamarin C#).
+                    </p>
+
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">2. Temperature and Humidity Monitoring System <span style="font-size: 0.8rem; font-weight: normal; color: var(--primary-color);">[New Development] C/C++ (Arduino) · C# (WPF)</span></h4>
+                    <p class="experience-description">
+                        Read sensor data and transferred it to the computer via the Ethernet module. Saved data and displayed it with a line chart (C# WPF). Built a Xamarin mobile app for Wi-Fi control.
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">C/C++</span>
+                        <span class="tech-badge">Raspberry Pi</span>
+                        <span class="tech-badge">Arduino</span>
+                        <span class="tech-badge">Xamarin</span>
+                        <span class="tech-badge">C# WPF</span>
+                        <span class="tech-badge">IoT</span>
+                    </div>
+                </div>
+
+                <!-- Experience Item 4 - Graduation Project -->
+                <div class="experience-item">
+                    <div class="experience-header">
+                        <div class="experience-company">
+                            <div class="company-logo">
+                                <img src="images/HCMUTE-logo.png" alt="HCMC University" style="width: 50px; height: 50px; object-fit: contain;">
+                            </div>
+                            <div>
+                                <h3>Graduation Project</h3>
+                                <p class="company-name">HCMC University of Technology and Education</p>
+                            </div>
+                        </div>
+                        <div class="experience-date">
+                            <i class="far fa-calendar"></i>
+                            <span>Sept 2018 - May 2019</span>
+                        </div>
+                    </div>
+                    <h4 style="margin-top: 1rem; margin-bottom: 0.5rem; color: var(--text-color);">AI Massage Robot</h4>
+                    <p class="experience-description">
+                        Developed an AI-powered massage robot using backpropagation algorithm to determine optimal massage motions. Integrated Kinect sensor for human-back size detection and processed input data including age, medical history, and gender to output precise position coordinates (x, y, z) and movement timing.
+                    </p>
+                    <p class="experience-description" style="margin-top: 0.5rem; font-size: 0.9rem;">
+                        <i class="fas fa-link"></i> Reference: <a href="https://vnexpress.net/sinh-vien-tp-hcm-dau-tu-20-trieu-dong-che-tao-giuong-massage-3857654.html" target="_blank" style="color: var(--primary-color); text-decoration: underline;">VnExpress - Student invests 20 million VND to create massage bed</a>
+                    </p>
+                    <div class="experience-technologies">
+                        <span class="tech-badge">AI</span>
+                        <span class="tech-badge">Backpropagation</span>
+                        <span class="tech-badge">Kinect Sensor</span>
+                        <span class="tech-badge">Robotics</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Certificates Section -->
+    <section id="certificates" class="certificates">
+        <div class="container">
+            <h2 class="section-title">Certificates & Awards</h2>
+            <div class="certificates-grid">
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/Cert_AI_Coder.jpg" alt="AI Coder Certificate">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">AI Coder</h3>
+                </div>
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/Cert_coding_expert.jpg" alt="Coding Expert Certificate">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">Coding Expert</h3>
+                </div>
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/cert_functional_architect2.jpg" alt="Functional Architect Certificate">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">Functional Architect</h3>
+                </div>
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/cert_Functional Architect.jpg" alt="Functional Architect Certificate">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">Functional Architect</h3>
+                </div>
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/cert_best_member.jpg" alt="Best Member Award">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">Best Member Award</h3>
+                </div>
+                <div class="certificate-item">
+                    <div class="certificate-image">
+                        <img src="images/certs/cert_best_project.jpg" alt="Best Project Award">
+                        <div class="certificate-overlay">
+                            <i class="fas fa-search-plus"></i>
+                        </div>
+                    </div>
+                    <h3 class="certificate-title">Best Project Award</h3>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects Section -->
+    <section id="projects" class="projects">
+        <div class="container">
+            <h2 class="section-title">Featured Projects</h2>
+            <div class="projects-list">
+                <!-- Project 1 -->
+                <div class="project-card-modern">
+                    <div class="project-image">
+                        <div class="project-placeholder">
+                            <i class="fas fa-microchip"></i>
+                        </div>
+                    </div>
+                    <div class="project-content">
+                        <h3>Containerized Android on Automotive Linux</h3>
+                        <p class="project-description">
+                            Designed and implemented a modern automotive architecture running Android 15 as an LXC container on top of Yocto Linux OS for Qualcomm SA8155 platform. This approach separates the Android infotainment layer from the core Linux system layer, providing better isolation, security, and maintainability. The containerized architecture enables independent updates, improved resource management, and enhanced system stability for automotive applications.
+                        </p>
+                        <div class="project-technologies">
+                            <span class="tech-tag">Qualcomm SA8155</span>
+                            <span class="tech-tag">Yocto Linux</span>
+                            <span class="tech-tag">Android 15</span>
+                            <span class="tech-tag">LXC Container</span>
+                            <span class="tech-tag">Automotive</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact">
+        <div class="container">
+            <h2 class="section-title contact-title-highlight">Feel Free to Contact Me</h2>
+            <div class="contact-content">
+                <div class="contact-info">
+                    <div class="contact-item">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>Da Nang, Viet Nam</span>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-phone"></i>
+                        <a href="tel:+84346602206">+84 346602206</a>
+                    </div>
+                    <div class="contact-item">
+                        <i class="fas fa-envelope"></i>
+                        <a href="mailto:truongtanvang@gmail.com">truongtanvang@gmail.com</a>
+                    </div>
+                </div>
+                <div class="social-links">
+                    <a href="https://www.linkedin.com/in/truong-vang-a4b464134/" target="_blank" class="social-btn" aria-label="LinkedIn">
+                        <i class="fab fa-linkedin"></i>
+                    </a>
+                    <a href="https://github.com/yourusername" target="_blank" class="social-btn" aria-label="GitHub">
+                        <i class="fab fa-github"></i>
+                    </a>
+                    <a href="https://www.facebook.com/vang.truongtan.1" target="_blank" class="social-btn" aria-label="Facebook">
+                        <i class="fab fa-facebook"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>Have a nice day! <i class="fas fa-grin-beam"></i><br></p>
+        </div>
+    </footer>
+
+    <!-- Detail Link Password Modal -->
+    <div id="detailPasswordModal" class="detail-modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="detailModalTitle">
+        <div class="detail-modal">
+            <div class="detail-modal-icon">🔒</div>
+            <h3 class="detail-modal-title" id="detailModalTitle">Content needs more updates.</h3>
+            <p class="detail-modal-subtitle">Enter the password to view this content.</p>
+            <div class="detail-modal-input-wrap">
+                <input type="password" id="detailModalPassword" class="detail-modal-input" placeholder="Password" maxlength="32" autocomplete="off">
+                <p class="detail-modal-error" id="detailModalError" style="display:none;">Incorrect password. Please try again.</p>
+            </div>
+            <div class="detail-modal-actions">
+                <button class="detail-modal-btn detail-modal-cancel" id="detailModalCancel">Cancel</button>
+                <button class="detail-modal-btn detail-modal-submit" id="detailModalSubmit">View Content</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
